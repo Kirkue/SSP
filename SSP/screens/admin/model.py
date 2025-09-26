@@ -23,6 +23,7 @@ class AdminModel(QObject):
     def load_paper_count(self):
         """Loads the paper count from the database and emits a signal."""
         self.paper_count = self.db_manager.get_setting('paper_count', default=100)
+        print(f"AdminModel.load_paper_count: Loaded {self.paper_count} from database")
         color = self._get_color_for_count(self.paper_count)
         self.paper_count_changed.emit(self.paper_count, color)
 

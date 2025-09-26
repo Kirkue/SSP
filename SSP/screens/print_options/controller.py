@@ -197,6 +197,7 @@ class PrintOptionsController(QWidget):
         if hasattr(admin_screen, 'get_paper_count'):
             available_paper = admin_screen.get_paper_count()
             print(f"Paper check: Available={available_paper}, Required={total_pages}")
+            print(f"Paper check: Admin screen type: {type(admin_screen)}")
             
             if available_paper < total_pages:
                 # Show warning and disable continue button

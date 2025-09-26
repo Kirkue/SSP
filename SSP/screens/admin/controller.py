@@ -50,10 +50,16 @@ class AdminController(QWidget):
         print("Admin screen entered. Refreshing data.")
         self.model.load_paper_count()
         self.model.load_coin_counts()
+        # Debug: Show what paper count is loaded
+        print(f"Admin on_enter: Paper count loaded as {self.model.paper_count}")
+        print(f"Admin on_enter: Fresh DB value: {self.model.db_manager.get_setting('paper_count', default=100)}")
 
     def get_paper_count(self) -> int:
         """Returns the current paper count from the model."""
-        return self.model.paper_count
+        # Always get fresh data from database to ensure consistency
+        fresh_count = self.model.db_manager.get_setting('paper_count', default=100)
+        print(f"Admin get_paper_count: Returning {fresh_count} (model has {self.model.paper_count})")
+        return fresh_count
 
     def update_paper_count(self, pages_to_print: int) -> bool:
         """

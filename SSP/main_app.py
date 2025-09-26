@@ -13,7 +13,7 @@ from screens.usb import USBController
 from screens.file_browser import FileBrowserController
 from screens.payment import PaymentController
 from screens.print_options import PrintOptionsController
-from screens.admin import AdminController as AdminScreen
+from screens.admin import AdminController
 from screens.data_viewer import DataViewerController
 from screens.thank_you import ThankYouController
 from database.models import init_db
@@ -50,7 +50,7 @@ class PrintingSystemApp(QMainWindow):
         self.file_browser_screen = FileBrowserController(self)
         self.printing_options_screen = PrintOptionsController(self)
         self.payment_screen = PaymentController(self)
-        self.admin_screen = AdminScreen(self)
+        self.admin_screen = AdminController(self)
         self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
         self.thank_you_screen = ThankYouController(self) # Initialize the new screen
 
