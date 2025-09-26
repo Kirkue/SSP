@@ -151,13 +151,13 @@ class DatabaseManager:
         if not self.conn: return
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT count FROM cash_inventory WHERE denomination = ?", (denomination,))
+            cursor.execute("SELECT count FROM cash_inventory WHERE denomination = ? AND type = ?", (denomination, type))
             result = cursor.fetchone()
             if result:
-                new_count = result['count'] + count
+                # Set the count to the new value (not add to existing)
                 cursor.execute(
-                    "UPDATE cash_inventory SET count = ?, last_updated = ? WHERE denomination = ?",
-                    (new_count, datetime.now(), denomination)
+                    "UPDATE cash_inventory SET count = ?, last_updated = ? WHERE denomination = ? AND type = ?",
+                    (count, datetime.now(), denomination, type)
                 )
             else:
                 cursor.execute(

@@ -124,7 +124,16 @@ class AdminScreenView(QWidget):
         self.coin_1_input = QLineEdit()
         self.coin_1_input.setValidator(QIntValidator(0, 1000))
         self.coin_1_input.setAlignment(Qt.AlignCenter)
-        self.coin_1_input.setFixedWidth(100)
+        self.coin_1_input.setFixedWidth(150)
+        self.coin_1_input.setFixedHeight(40)
+        self.coin_1_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #1f1f38; color: white; font-size: 24px;
+                font-weight: bold; border: 3px solid #28a745; border-radius: 8px;
+                padding: 8px 12px;
+            }
+            QLineEdit:focus { border: 3px solid #ff9800; }
+        """)
         self.coin_1_input.returnPressed.connect(
             lambda: self.update_coin_1_clicked.emit(self.coin_1_input.text())
         )
@@ -139,7 +148,16 @@ class AdminScreenView(QWidget):
         self.coin_5_input = QLineEdit()
         self.coin_5_input.setValidator(QIntValidator(0, 1000))
         self.coin_5_input.setAlignment(Qt.AlignCenter)
-        self.coin_5_input.setFixedWidth(100)
+        self.coin_5_input.setFixedWidth(150)
+        self.coin_5_input.setFixedHeight(40)
+        self.coin_5_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #1f1f38; color: white; font-size: 24px;
+                font-weight: bold; border: 3px solid #28a745; border-radius: 8px;
+                padding: 8px 12px;
+            }
+            QLineEdit:focus { border: 3px solid #ff9800; }
+        """)
         self.coin_5_input.returnPressed.connect(
             lambda: self.update_coin_5_clicked.emit(self.coin_5_input.text())
         )
@@ -208,18 +226,18 @@ class AdminScreenView(QWidget):
         
         self.coin_1_input.setStyleSheet(f"""
             QLineEdit {{
-                background-color: #1f1f38; color: white; font-size: 18px;
+                background-color: #1f1f38; color: white; font-size: 24px;
                 font-weight: bold; border: 3px solid {coin_1_color}; border-radius: 8px;
-                padding: 5px 10px;
+                padding: 8px 12px;
             }}
             QLineEdit:focus {{ border: 3px solid #ff9800; }}
         """)
         
         self.coin_5_input.setStyleSheet(f"""
             QLineEdit {{
-                background-color: #1f1f38; color: white; font-size: 18px;
+                background-color: #1f1f38; color: white; font-size: 24px;
                 font-weight: bold; border: 3px solid {coin_5_color}; border-radius: 8px;
-                padding: 5px 10px;
+                padding: 8px 12px;
             }}
             QLineEdit:focus {{ border: 3px solid #ff9800; }}
         """)

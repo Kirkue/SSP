@@ -124,6 +124,9 @@ class PrintOptionsController(QWidget):
         self.view.set_bw_mode()
         # Clear any existing warnings when setting new PDF data
         self.view.clear_paper_warning()
+        # Check paper availability immediately after setting PDF data
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, self._check_paper_availability)
     
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
@@ -137,7 +140,8 @@ class PrintOptionsController(QWidget):
         # Delay the supplies check slightly to ensure admin_screen is ready
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, self.check_supplies)
-        # Paper availability check will happen automatically after analysis completes
+        # Check paper availability immediately when entering screen
+        QTimer.singleShot(200, self._check_paper_availability)
 
     def on_leave(self):
         """Called by main_app when leaving this screen."""
@@ -178,12 +182,16 @@ class PrintOptionsController(QWidget):
 
     def _check_paper_availability(self):
         """Checks if there's enough paper for the current print job."""
-        payment_data = self.model.get_payment_data()
-        if not payment_data:
-            print("Paper check: No payment data available yet")
-            return  # No payment data available yet
+        print("Paper check: Starting paper availability check...")
+        # Get current state from model even if payment data isn't ready
+        selected_pages = getattr(self.model, 'selected_pages', None)
+        copies = getattr(self.model, '_copies', 1)
         
-        total_pages = len(payment_data['selected_pages']) * payment_data['copies']
+        if not selected_pages:
+            print("Paper check: No selected pages available yet")
+            return
+        
+        total_pages = len(selected_pages) * copies
         admin_screen = self.main_app.admin_screen
         
         if hasattr(admin_screen, 'get_paper_count'):
