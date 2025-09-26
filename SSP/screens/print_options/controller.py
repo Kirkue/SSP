@@ -41,11 +41,13 @@ class PrintOptionsController(QWidget):
         """Sets black and white mode."""
         self.model.set_color_mode("Black and White")
         self.view.set_bw_mode()
+        self._check_paper_availability()
     
     def _set_color_mode(self):
         """Sets color mode."""
         self.model.set_color_mode("Color")
         self.view.set_color_mode()
+        self._check_paper_availability()
     
     def _decrease_copies(self):
         """Decreases the number of copies."""
