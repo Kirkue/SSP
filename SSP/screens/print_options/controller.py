@@ -71,9 +71,11 @@ class PrintOptionsController(QWidget):
     
     def _on_analysis_completed(self, results):
         """Handles when analysis is completed."""
+        print("Analysis completed, enabling continue button and checking paper availability")
         self.view.set_continue_button_enabled(True)
-        # Check paper availability after analysis is complete
-        self._check_paper_availability()
+        # Check paper availability after analysis is complete with a small delay
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, self._check_paper_availability)
     
     def _on_analysis_error(self, error_message):
         """Handles analysis errors."""
@@ -120,6 +122,8 @@ class PrintOptionsController(QWidget):
         self.model.set_pdf_data(pdf_data, selected_pages)
         self.view.update_copies_display(self.model.get_copies())
         self.view.set_bw_mode()
+        # Clear any existing warnings when setting new PDF data
+        self.view.clear_paper_warning()
     
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
@@ -133,8 +137,7 @@ class PrintOptionsController(QWidget):
         # Delay the supplies check slightly to ensure admin_screen is ready
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, self.check_supplies)
-        # Also check paper availability when entering the screen
-        QTimer.singleShot(200, self._check_paper_availability)
+        # Paper availability check will happen automatically after analysis completes
 
     def on_leave(self):
         """Called by main_app when leaving this screen."""
