@@ -19,7 +19,7 @@ class PrintOptionsController(QWidget):
         self.setLayout(self.view.main_layout)
         
         self._connect_signals()
-    
+
     def _connect_signals(self):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller ---
@@ -107,8 +107,51 @@ class PrintOptionsController(QWidget):
         print("Print options screen entered")
         # Ensure analysis thread is not running from previous visits
         self.model.stop_analysis()
-    
+        
+        # Delay the supplies check slightly to ensure admin_screen is ready
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, self.check_supplies)
+
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("Print options screen leaving")
         self.model.stop_analysis()
+    
+    def check_supplies(self):
+        """Check current supplies status and update view."""
+        try:
+            # Get db_manager only when needed
+            if hasattr(self.main_app, 'admin_screen') and hasattr(self.main_app.admin_screen, 'db_manager'):
+                db_manager = self.main_app.admin_screen.db_manager
+                status = db_manager.get_supplies_status()
+                
+                if status:
+                    self.view.update_supplies_status(status)
+                    
+                    # Add warning if insufficient change possible
+                    if hasattr(self.model, 'total_cost'):
+                        change_needed = self._calculate_max_change(self.model.total_cost)
+                        available_change = (
+                            status['coins']['peso_1'] + 
+                            status['coins']['peso_5'] * 5
+                        )
+                        
+                        if available_change < change_needed:
+                            status['warnings'].append(
+                                f"Insufficient change available for ₱{change_needed} transaction!"
+                            )
+                            self.view.update_supplies_status(status)
+            else:
+                print("Warning: Database manager not available for supplies check")
+                
+        except Exception as e:
+            print(f"Error checking supplies status: {e}")
+            # Don't block the UI if supplies check fails
+            pass
+
+    def _calculate_max_change(self, cost):
+        """Calculate maximum possible change needed for a transaction."""
+        next_bill = 20  # Assuming minimum bill is ₱20
+        while next_bill < cost:
+            next_bill += 20
+        return next_bill - cost

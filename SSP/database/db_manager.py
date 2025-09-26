@@ -199,3 +199,53 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Error getting error log: {e}")
             return []
+
+    # --- NEW: get_supplies_status method ---
+    def get_supplies_status(self):
+        """Get current paper and coin inventory status."""
+        if not self.conn:
+            return None
+            
+        try:
+            cursor = self.conn.cursor()
+            
+            # Get paper count from settings
+            cursor.execute("SELECT value FROM settings WHERE key = 'paper_count'")
+            paper_result = cursor.fetchone()
+            paper_count = int(paper_result['value']) if paper_result else 0
+            
+            # Get coin inventory
+            cursor.execute("""
+                SELECT denomination, count 
+                FROM cash_inventory 
+                WHERE type = 'coin' AND denomination IN (1, 5)
+            """)
+            coins = {row['denomination']: row['count'] for row in cursor.fetchall()}
+            
+            # Build status dictionary
+            status = {
+                "paper_count": paper_count,
+                "coins": {
+                    "peso_1": coins.get(1, 0),
+                    "peso_5": coins.get(5, 0)
+                },
+                "warnings": []
+            }
+            
+            # Add warnings based on thresholds
+            if paper_count < 20:
+                status["warnings"].append("Low paper level!")
+            if coins.get(1, 0) < 50:
+                status["warnings"].append("Low on ₱1 coins!")
+            if coins.get(5, 0) < 20:
+                status["warnings"].append("Low on ₱5 coins!")
+                
+            return status
+            
+        except sqlite3.Error as e:
+            print(f"Error getting supplies status: {e}")
+            return None
+
+    def update_paper_count(self, count):
+        """Update the paper count in settings."""
+        self.update_setting('paper_count', count)

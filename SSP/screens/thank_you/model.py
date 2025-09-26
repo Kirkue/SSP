@@ -11,10 +11,15 @@ class ThankYouModel(QObject):
         super().__init__()
         self.redirect_timer = QTimer()
         self.redirect_timer.setSingleShot(True)
-        self.redirect_timer.timeout.connect(self.redirect_to_idle.emit)
+        self.redirect_timer.timeout.connect(self._on_timer_timeout)
         
         # Screen states
         self.current_state = "initial"
+        
+    def _on_timer_timeout(self):
+        """Called when the redirect timer expires."""
+        print("Thank you screen: Timer timeout triggered, emitting redirect signal...")
+        self.redirect_to_idle.emit()
         
     def on_enter(self, main_app):
         """Called when the screen is shown."""
@@ -41,6 +46,7 @@ class ThankYouModel(QObject):
         )
         
         # Start the 5-second timer to go back to the idle screen
+        print("Thank you screen: Starting 5-second redirect timer...")
         self.redirect_timer.start(5000)
     
     def show_waiting_for_print(self):

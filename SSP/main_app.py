@@ -139,11 +139,19 @@ class PrintingSystemApp(QMainWindow):
         print("✅ Print job successfully completed.")
         # Tell the thank you screen to update its state to 'finished'
         # Check if we are on the correct screen, as this signal is asynchronous
-        if self.stacked_widget.currentWidget() == self.thank_you_screen:
+        current_screen = self.stacked_widget.currentWidget()
+        print(f"Current screen: {type(current_screen).__name__}")
+        
+        if current_screen == self.thank_you_screen:
             print("Thank you screen is active, calling finish_printing()")
             self.thank_you_screen.finish_printing()
         else:
-            print(f"Warning: Print successful signal received, but not on thank you screen. Current screen: {type(self.stacked_widget.currentWidget()).__name__}")
+            print(f"Warning: Print successful signal received, but not on thank you screen. Current screen: {type(current_screen).__name__}")
+            print("Attempting to navigate to thank you screen first...")
+            self.show_screen('thank_you')
+            # Give it a moment to initialize, then finish printing
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(100, lambda: self.thank_you_screen.finish_printing())
 
     def on_print_waiting(self):
         """Called when the print job is sent and we're waiting for actual printing to complete."""

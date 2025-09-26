@@ -90,6 +90,8 @@ class GPIOPaymentThread(QThread):
             return 5
         elif 10 <= pulses <= 12:
             return 10
+        elif 18 <= pulses <= 21:
+            return 20
         return 0
 
     def get_bill_value(self, pulses):

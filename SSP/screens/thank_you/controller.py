@@ -37,6 +37,7 @@ class ThankYouController(QWidget):
     
     def _go_to_idle(self):
         """Navigates back to the idle screen."""
+        print("Thank you screen: Timer expired, navigating to idle screen...")
         self.main_app.show_screen('idle')
     
     def on_enter(self):
