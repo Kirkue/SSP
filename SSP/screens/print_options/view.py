@@ -185,6 +185,41 @@ class PrintOptionsScreenView(QWidget):
         """Enables or disables the continue button."""
         self.continue_btn.setEnabled(enabled)
     
+    def show_paper_warning(self, available_paper, required_paper):
+        """Shows a warning about insufficient paper."""
+        warning_text = f"⚠️ INSUFFICIENT PAPER ⚠️"
+        details_text = f"Only {available_paper} sheets available, but {required_paper} sheets needed.\nPlease contact administrator to refill paper."
+        
+        # Update the display with warning
+        self.cost_label.setText(warning_text)
+        self.cost_label.setStyleSheet("color: #dc3545; font-size: 24px; font-weight: bold; margin: 0px 0 0 0;")
+        self.analysis_details_label.setText(details_text)
+        self.analysis_details_label.setStyleSheet("color: #dc3545; font-size: 14px; margin-top: 5px; font-weight: bold;")
+        
+        # Disable the continue button
+        self.continue_btn.setEnabled(False)
+        self.continue_btn.setText("❌ Insufficient Paper")
+        self.continue_btn.setStyleSheet("""
+            QPushButton {
+                color: white; font-size: 12px; font-weight: bold;
+                border: none; border-radius: 4px !important; height: 40px;
+                background-color: #dc3545;
+                padding-left: 12px; padding-right: 12px;
+            }
+            QPushButton:hover { background-color: #c82333; }
+        """)
+    
+    def clear_paper_warning(self):
+        """Clears the paper warning and resets the display."""
+        # Reset the continue button
+        self.continue_btn.setEnabled(True)
+        self.continue_btn.setText("Continue to Payment →")
+        self.continue_btn.setStyleSheet(self.get_continue_button_style())
+        
+        # Reset the cost label style
+        self.cost_label.setStyleSheet("color: #33cc33; font-size: 24px; font-weight: bold; margin: 0px 0 0 0;")
+        self.analysis_details_label.setStyleSheet("color: #36454F; font-size: 14px; margin-top: 5px;")
+    
     def get_copies_button_style(self):
         """Returns the style for copy control buttons."""
         return """

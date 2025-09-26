@@ -51,11 +51,13 @@ class PrintOptionsController(QWidget):
         """Decreases the number of copies."""
         self.model.change_copies(-1)
         self.view.update_copies_display(self.model.get_copies())
+        self._check_paper_availability()
     
     def _increase_copies(self):
         """Increases the number of copies."""
         self.model.change_copies(1)
         self.view.update_copies_display(self.model.get_copies())
+        self._check_paper_availability()
     
     def _on_analysis_started(self):
         """Handles when analysis starts."""
@@ -68,6 +70,8 @@ class PrintOptionsController(QWidget):
     def _on_analysis_completed(self, results):
         """Handles when analysis is completed."""
         self.view.set_continue_button_enabled(True)
+        # Check paper availability after analysis is complete
+        self._check_paper_availability()
     
     def _on_analysis_error(self, error_message):
         """Handles analysis errors."""
@@ -80,6 +84,19 @@ class PrintOptionsController(QWidget):
         if not payment_data:
             QMessageBox.warning(self, "Please Wait", "Cost calculation is still in progress.")
             return
+        
+        # Check paper availability before proceeding to payment
+        total_pages = len(payment_data['selected_pages']) * payment_data['copies']
+        admin_screen = self.main_app.admin_screen
+        
+        if hasattr(admin_screen, 'get_paper_count'):
+            available_paper = admin_screen.get_paper_count()
+            
+            if available_paper < total_pages:
+                # Disable continue button and show warning
+                self.view.set_continue_button_enabled(False)
+                self.view.show_paper_warning(available_paper, total_pages)
+                return
         
         self.main_app.payment_screen.set_payment_data(payment_data)
         self.main_app.show_screen('payment')
@@ -149,6 +166,25 @@ class PrintOptionsController(QWidget):
             # Don't block the UI if supplies check fails
             pass
 
+    def _check_paper_availability(self):
+        """Checks if there's enough paper for the current print job."""
+        payment_data = self.model.get_payment_data()
+        if not payment_data:
+            return  # No payment data available yet
+        
+        total_pages = len(payment_data['selected_pages']) * payment_data['copies']
+        admin_screen = self.main_app.admin_screen
+        
+        if hasattr(admin_screen, 'get_paper_count'):
+            available_paper = admin_screen.get_paper_count()
+            
+            if available_paper < total_pages:
+                # Show warning and disable continue button
+                self.view.show_paper_warning(available_paper, total_pages)
+            else:
+                # Clear any existing warning
+                self.view.clear_paper_warning()
+    
     def _calculate_max_change(self, cost):
         """Calculate maximum possible change needed for a transaction."""
         next_bill = 20  # Assuming minimum bill is ₱20
