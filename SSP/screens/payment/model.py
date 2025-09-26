@@ -148,9 +148,10 @@ class PaymentModel(QObject):
     payment_button_enabled = pyqtSignal(bool)  # enable/disable payment button
     payment_mode_changed = pyqtSignal(bool)  # payment mode enabled/disabled
     
-    def __init__(self):
+    def __init__(self, main_app=None):
         super().__init__()
         self.db_manager = DatabaseManager()
+        self.main_app = main_app
         self.total_cost = 0
         self.amount_received = 0
         self.payment_data = None
@@ -319,7 +320,12 @@ class PaymentModel(QObject):
         # Handle change dispensing
         if change_amount > 0:
             self.payment_status_updated.emit(f"Printing... Now dispensing change: ₱{change_amount:.2f}")
-            self.dispense_thread = DispenseThread(self.change_dispenser, change_amount)
+            # Get admin screen from main_app to pass to dispense thread
+            admin_screen = None
+            if hasattr(self, 'main_app') and hasattr(self.main_app, 'admin_screen'):
+                admin_screen = self.main_app.admin_screen
+            
+            self.dispense_thread = DispenseThread(self.change_dispenser, change_amount, admin_screen)
             self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
             self.dispense_thread.dispensing_finished.connect(self._on_dispensing_finished)
             self.dispense_thread.start()

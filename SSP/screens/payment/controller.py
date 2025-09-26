@@ -14,7 +14,7 @@ class PaymentController(QWidget):
         super().__init__(parent)
         self.main_app = main_app
         
-        self.model = PaymentModel()
+        self.model = PaymentModel(main_app)
         self.view = PaymentScreenView()
         
         # Set the view's layout as this controller's layout

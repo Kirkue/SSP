@@ -13,6 +13,9 @@ class AdminScreenView(QWidget):
     view_data_logs_clicked = pyqtSignal()
     update_paper_clicked = pyqtSignal(str)
     reset_paper_clicked = pyqtSignal()
+    update_coin_1_clicked = pyqtSignal(str)
+    update_coin_5_clicked = pyqtSignal(str)
+    reset_coins_clicked = pyqtSignal()
 
     def __init__(self, background_image_path=None):
         super().__init__()
@@ -68,6 +71,7 @@ class AdminScreenView(QWidget):
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(25)
         layout.addWidget(self._create_paper_management_group())
+        layout.addWidget(self._create_coin_management_group())
         layout.addWidget(self._create_system_data_group())
         return frame
 
@@ -106,6 +110,62 @@ class AdminScreenView(QWidget):
         
         return group
 
+    def _create_coin_management_group(self):
+        group = QGroupBox("Coin Inventory Management")
+        group.setStyleSheet(self._get_groupbox_style())
+        layout = QVBoxLayout(group)
+        layout.setSpacing(15)
+
+        # 1 Peso Coins Section
+        peso_1_layout = QHBoxLayout()
+        peso_1_layout.addWidget(QLabel("₱1 Coins:", styleSheet="color: #e0e0e0; font-size: 18px; font-weight: bold;"))
+        peso_1_layout.addStretch()
+        
+        self.coin_1_input = QLineEdit()
+        self.coin_1_input.setValidator(QIntValidator(0, 1000))
+        self.coin_1_input.setAlignment(Qt.AlignCenter)
+        self.coin_1_input.setFixedWidth(100)
+        self.coin_1_input.returnPressed.connect(
+            lambda: self.update_coin_1_clicked.emit(self.coin_1_input.text())
+        )
+        peso_1_layout.addWidget(self.coin_1_input)
+        layout.addLayout(peso_1_layout)
+
+        # 5 Peso Coins Section
+        peso_5_layout = QHBoxLayout()
+        peso_5_layout.addWidget(QLabel("₱5 Coins:", styleSheet="color: #e0e0e0; font-size: 18px; font-weight: bold;"))
+        peso_5_layout.addStretch()
+        
+        self.coin_5_input = QLineEdit()
+        self.coin_5_input.setValidator(QIntValidator(0, 1000))
+        self.coin_5_input.setAlignment(Qt.AlignCenter)
+        self.coin_5_input.setFixedWidth(100)
+        self.coin_5_input.returnPressed.connect(
+            lambda: self.update_coin_5_clicked.emit(self.coin_5_input.text())
+        )
+        peso_5_layout.addWidget(self.coin_5_input)
+        layout.addLayout(peso_5_layout)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        update_coin_1_btn = QPushButton("Update ₱1", clicked=lambda: self.update_coin_1_clicked.emit(self.coin_1_input.text()))
+        update_coin_1_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00"))
+        
+        update_coin_5_btn = QPushButton("Update ₱5", clicked=lambda: self.update_coin_5_clicked.emit(self.coin_5_input.text()))
+        update_coin_5_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00"))
+        
+        reset_coins_btn = QPushButton("Refill All Coins", clicked=self.reset_coins_clicked.emit)
+        reset_coins_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a"))
+        
+        button_layout.addStretch()
+        button_layout.addWidget(update_coin_1_btn)
+        button_layout.addWidget(update_coin_5_btn)
+        button_layout.addWidget(reset_coins_btn)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        return group
+
     def _create_system_data_group(self):
         group = QGroupBox("System & Data")
         group.setStyleSheet(self._get_groupbox_style())
@@ -136,6 +196,39 @@ class AdminScreenView(QWidget):
             }}
             QLineEdit:focus {{ border: 3px solid #ff9800; }}
         """)
+
+    def update_coin_count_display(self, coin_1_count: int, coin_5_count: int):
+        """Updates the coin count input fields."""
+        self.coin_1_input.setText(str(coin_1_count))
+        self.coin_5_input.setText(str(coin_5_count))
+        
+        # Set styling based on coin levels
+        coin_1_color = self._get_coin_color(coin_1_count)
+        coin_5_color = self._get_coin_color(coin_5_count)
+        
+        self.coin_1_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: #1f1f38; color: white; font-size: 18px;
+                font-weight: bold; border: 3px solid {coin_1_color}; border-radius: 8px;
+                padding: 5px 10px;
+            }}
+            QLineEdit:focus {{ border: 3px solid #ff9800; }}
+        """)
+        
+        self.coin_5_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: #1f1f38; color: white; font-size: 18px;
+                font-weight: bold; border: 3px solid {coin_5_color}; border-radius: 8px;
+                padding: 5px 10px;
+            }}
+            QLineEdit:focus {{ border: 3px solid #ff9800; }}
+        """)
+
+    def _get_coin_color(self, count: int) -> str:
+        """Determines the display color based on the coin count."""
+        if count <= 20: return "#dc3545"  # Red - Low
+        if count <= 50: return "#ffc107"  # Yellow - Medium
+        return "#28a745"  # Green - Good
 
     def show_message_box(self, title: str, text: str):
         QMessageBox.warning(self, title, text)

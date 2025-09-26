@@ -127,9 +127,14 @@ class PrintOptionsController(QWidget):
         # Ensure analysis thread is not running from previous visits
         self.model.stop_analysis()
         
+        # Clear any existing paper warnings first
+        self.view.clear_paper_warning()
+        
         # Delay the supplies check slightly to ensure admin_screen is ready
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, self.check_supplies)
+        # Also check paper availability when entering the screen
+        QTimer.singleShot(200, self._check_paper_availability)
 
     def on_leave(self):
         """Called by main_app when leaving this screen."""
@@ -172,6 +177,7 @@ class PrintOptionsController(QWidget):
         """Checks if there's enough paper for the current print job."""
         payment_data = self.model.get_payment_data()
         if not payment_data:
+            print("Paper check: No payment data available yet")
             return  # No payment data available yet
         
         total_pages = len(payment_data['selected_pages']) * payment_data['copies']
@@ -179,13 +185,18 @@ class PrintOptionsController(QWidget):
         
         if hasattr(admin_screen, 'get_paper_count'):
             available_paper = admin_screen.get_paper_count()
+            print(f"Paper check: Available={available_paper}, Required={total_pages}")
             
             if available_paper < total_pages:
                 # Show warning and disable continue button
+                print(f"Paper check: Showing insufficient paper warning")
                 self.view.show_paper_warning(available_paper, total_pages)
             else:
                 # Clear any existing warning
+                print(f"Paper check: Sufficient paper available, clearing any warnings")
                 self.view.clear_paper_warning()
+        else:
+            print("Paper check: Admin screen not available")
     
     def _calculate_max_change(self, cost):
         """Calculate maximum possible change needed for a transaction."""

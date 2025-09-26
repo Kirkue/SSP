@@ -161,7 +161,7 @@ class ChangeDispenser:
                 print(f"CRITICAL: Failed to initialize pigpio or hoppers: {e}. Switching to simulation mode.")
                 self.simulated = True
 
-    def dispense_change(self, amount: float, status_callback=None):
+    def dispense_change(self, amount: float, status_callback=None, admin_screen=None):
         """Calculates and dispenses the correct change, one coin at a time."""
         if amount <= 0:
             return True
@@ -172,6 +172,13 @@ class ChangeDispenser:
         print(f"Dispensing ₱{amount:.2f}: {num_fives}x ₱5, {num_ones}x ₱1")
         if status_callback:
             status_callback(f"Preparing to dispense ₱{amount:.2f}...")
+
+        # Update coin inventory in database if admin_screen is provided
+        if admin_screen and hasattr(admin_screen, 'model'):
+            if not admin_screen.model.decrement_coins(num_ones, num_fives):
+                error_msg = "CRITICAL: Not enough coins in inventory. Please contact admin."
+                if status_callback: status_callback(error_msg)
+                return False
 
         # Dispense 5-peso coins
         for i in range(num_fives):
@@ -227,12 +234,13 @@ class DispenseThread(QThread):
     status_update = pyqtSignal(str)
     dispensing_finished = pyqtSignal(bool)
 
-    def __init__(self, dispenser: ChangeDispenser, amount: float):
+    def __init__(self, dispenser: ChangeDispenser, amount: float, admin_screen=None):
         super().__init__()
         self.dispenser = dispenser
         self.amount = amount
+        self.admin_screen = admin_screen
 
     def run(self):
         """This method is executed when the thread starts."""
-        success = self.dispenser.dispense_change(self.amount, self.status_update.emit)
+        success = self.dispenser.dispense_change(self.amount, self.status_update.emit, self.admin_screen)
         self.dispensing_finished.emit(success)

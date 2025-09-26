@@ -34,9 +34,13 @@ class AdminController(QWidget):
         self.view.view_data_logs_clicked.connect(self._show_data_viewer)
         self.view.reset_paper_clicked.connect(self.model.reset_paper_count)
         self.view.update_paper_clicked.connect(self.model.update_paper_count_from_string)
+        self.view.update_coin_1_clicked.connect(self.model.update_coin_1_count)
+        self.view.update_coin_5_clicked.connect(self.model.update_coin_5_count)
+        self.view.reset_coins_clicked.connect(self.model.reset_coin_counts)
         
         # --- Model -> View ---
         self.model.paper_count_changed.connect(self.view.update_paper_count_display)
+        self.model.coin_count_changed.connect(self.view.update_coin_count_display)
         self.model.show_message.connect(self.view.show_message_box)
 
     # --- Public API for main_app and other screens ---
@@ -45,6 +49,7 @@ class AdminController(QWidget):
         """Called by main_app when this screen becomes active."""
         print("Admin screen entered. Refreshing data.")
         self.model.load_paper_count()
+        self.model.load_coin_counts()
 
     def get_paper_count(self) -> int:
         """Returns the current paper count from the model."""
