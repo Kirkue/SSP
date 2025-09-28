@@ -25,9 +25,7 @@ class USBController(QWidget):
     def _connect_signals(self):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller ---
-        self.view.scan_button_clicked.connect(self.model.manual_scan_usb_drives)
         self.view.test_button_clicked.connect(self.model.create_test_files)
-        self.view.clean_button_clicked.connect(self._handle_cleanup_request)
         self.view.back_button_clicked.connect(self._go_back)
         self.view.cancel_button_clicked.connect(self._cancel_operation)
         
@@ -43,10 +41,6 @@ class USBController(QWidget):
         color_hex = self.model.get_status_color(style_key)
         self.view.update_status_indicator(text, style_key, color_hex)
     
-    def _handle_cleanup_request(self):
-        """Handles the cleanup button click with confirmation."""
-        if self.view.show_cleanup_confirmation():
-            self.model.cleanup_temp_files()
     
     def _handle_pdf_files_found(self, pdf_files):
         """Handles when PDF files are found on the USB drive."""
@@ -67,11 +61,6 @@ class USBController(QWidget):
         """Called by main_app when this screen becomes active."""
         print("🔄 Entering USB screen, performing initial check...")
         self.view.start_blinking()
-        
-        try:
-            self.model.cleanup_all_temp_folders()
-        except Exception as e:
-            print(f"Error during initial cleanup of old temp folders: {e}")
         
         self.model.check_current_drives()
     

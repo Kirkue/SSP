@@ -121,13 +121,6 @@ class USBScreenModel(QObject):
             self.status_changed.emit("Error checking for USB drives.", 'error')
             print(f"Error during USB check: {e}")
     
-    def manual_scan_usb_drives(self):
-        """Initiates a manual scan for USB drives."""
-        self.status_changed.emit("Scanning for USB drives...", 'monitoring')
-        threading.Thread(
-            target=lambda: self.handle_usb_scan_result(self.usb_manager.get_usb_drives()),
-            daemon=True
-        ).start()
     
     def handle_usb_scan_result(self, usb_drives):
         """Processes the results of a USB scan."""
@@ -183,20 +176,6 @@ class USBScreenModel(QObject):
         except Exception as e:
             self.show_message.emit("Test Error", f"Failed to create dummy files: {e}")
     
-    def cleanup_temp_files(self):
-        """Cleans up temporary files."""
-        try:
-            self.usb_manager.cleanup_temp_files()
-            self.show_message.emit("Cleanup", "Temporary files have been cleaned.")
-        except Exception as e:
-            self.show_message.emit("Cleanup Error", f"Failed to clean temporary files: {e}")
-    
-    def cleanup_all_temp_folders(self):
-        """Cleans up all temporary folders."""
-        try:
-            self.usb_manager.cleanup_all_temp_folders()
-        except Exception as e:
-            print(f"Error during initial cleanup of old temp folders: {e}")
     
     def on_usb_detected(self, drive_path):
         """Handles USB drive detection."""

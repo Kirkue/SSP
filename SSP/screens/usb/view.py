@@ -13,9 +13,7 @@ def get_base_dir():
 
 class USBScreenView(QWidget):
     """The user interface for the USB Screen. Contains no logic."""
-    scan_button_clicked = pyqtSignal()
     test_button_clicked = pyqtSignal()
-    clean_button_clicked = pyqtSignal()
     back_button_clicked = pyqtSignal()
     cancel_button_clicked = pyqtSignal()
     
@@ -51,7 +49,7 @@ class USBScreenView(QWidget):
         title.setStyleSheet("color: #36454F; font-size: 38px; font-weight: bold;")
         title.setWordWrap(True)
 
-        instruction = QLabel("The system will automatically detect your drive. If it doesn't appear, you can try a manual scan.")
+        instruction = QLabel("The system will automatically detect your drive.")
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setWordWrap(True)
         instruction.setStyleSheet("color: #36454F; font-size: 22px; line-height: 1.4;")
@@ -63,14 +61,8 @@ class USBScreenView(QWidget):
         self.status_indicator.setStyleSheet(self.get_initial_status_style())
 
         # Button Creation
-        self.scan_button = QPushButton("Manual Scan")
-        self.scan_button.setStyleSheet(self.get_action_button_style())
-        
         self.test_button = QPushButton("TEST: Simulate PDF")
         self.test_button.setStyleSheet(self.get_action_button_style())
-        
-        self.clean_button = QPushButton("Clean Temp Files")
-        self.clean_button.setStyleSheet(self.get_action_button_style())
 
         self.back_button = QPushButton("← Back to Main")
         self.back_button.setStyleSheet(self.get_back_button_style())
@@ -94,11 +86,7 @@ class USBScreenView(QWidget):
 
         action_buttons_layout = QHBoxLayout()
         action_buttons_layout.addStretch()
-        action_buttons_layout.addWidget(self.scan_button)
-        action_buttons_layout.addSpacing(20)
         action_buttons_layout.addWidget(self.test_button)
-        action_buttons_layout.addSpacing(20)
-        action_buttons_layout.addWidget(self.clean_button)
         action_buttons_layout.addStretch()
         fg_layout.addLayout(action_buttons_layout)
         fg_layout.addStretch(4)
@@ -117,9 +105,7 @@ class USBScreenView(QWidget):
         main_layout.setCurrentWidget(foreground_widget)
 
         # Connect button signals
-        self.scan_button.clicked.connect(self.scan_button_clicked.emit)
         self.test_button.clicked.connect(self.test_button_clicked.emit)
-        self.clean_button.clicked.connect(self.clean_button_clicked.emit)
         self.back_button.clicked.connect(self.back_button_clicked.emit)
         self.cancel_button.clicked.connect(self.cancel_button_clicked.emit)
     
@@ -166,12 +152,6 @@ class USBScreenView(QWidget):
         """Stops the blinking effect."""
         self.blink_timer.stop()
     
-    def show_cleanup_confirmation(self):
-        """Shows confirmation dialog for cleanup."""
-        reply = QMessageBox.question(self, 'Confirm Cleanup', 
-                                     'This will delete all copied temporary files. Are you sure?',
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        return reply == QMessageBox.Yes
     
     def show_message(self, title, text):
         """Shows a message to the user."""

@@ -1,6 +1,7 @@
 import os
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
 from PyQt5.QtGui import QPixmap
+from config import get_config
 
 try:
     import fitz  # PyMuPDF
@@ -61,9 +62,10 @@ class PDFAnalysisThread(QThread):
             
             doc.close()
             
-            # Calculate pricing (example rates)
-            black_rate = 1.0  # ₱1 per black page
-            color_rate = 5.0  # ₱5 per color page
+            # Calculate pricing using config values
+            config = get_config()
+            black_rate = config.black_and_white_price
+            color_rate = config.color_price
             total_cost = (black_pages * black_rate) + (color_pages * color_rate)
             
             analysis = {
@@ -173,12 +175,13 @@ class FileBrowserModel(QObject):
     
     def go_to_payment(self, pdf_data, analysis_data):
         """Navigates to payment screen with PDF data."""
+        config = get_config()
         payment_data = {
             'pdf_data': pdf_data,
             'analysis': analysis_data,
             'selected_pages': list(range(analysis_data['total_pages'])),
             'copies': 1,
-            'color_mode': 'Black and White',  # Default
+            'color_mode': config.default_color_mode,  # Use config default
             'total_cost': analysis_data['pricing']['total_cost']
         }
         self.navigation_requested.emit('payment')

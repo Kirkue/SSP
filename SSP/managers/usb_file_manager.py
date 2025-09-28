@@ -32,10 +32,8 @@ class USBFileManager:
                 usb_drives = self._get_windows_usb_drives()
             elif system == "Linux":
                 usb_drives = self._get_linux_usb_drives()
-            elif system == "Darwin":  # macOS
-                usb_drives = self._get_macos_usb_drives()
             else:
-                print(f"Unsupported operating system: {system}")
+                print(f"OS not found: {system}")
                 
         except Exception as e:
             print(f"Error detecting USB drives: {e}")

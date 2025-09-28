@@ -3,15 +3,13 @@ import os
 import subprocess
 import tempfile
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
+from config import get_config
 
 try:
     import fitz  # PyMuPDF
     PYMUPDF_AVAILABLE = True
 except ImportError:
     PYMUPDF_AVAILABLE = False
-
-# IMPORTANT: Replace this with your exact printer name found via `lpstat -p`
-PRINTER_NAME = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
 
 class PrinterThread(QThread):
     """
@@ -45,9 +43,10 @@ class PrinterThread(QThread):
             # Step 2: Construct the CUPS lp command
             command = self.build_print_command()
             mode_str = "color" if self.color_mode == "Color" else "monochrome"
+            config = get_config()
             print(f"Executing print command: {' '.join(command)}")
             print(f"Printing file: {self.temp_pdf_path}")
-            print(f"Printer: HP_Smart_Tank_580_590_series_5E0E1D_USB")
+            print(f"Printer: {self.printer_name}")
             print(f"Color mode: {self.color_mode} -> {mode_str}")
             print(f"Copies: {self.copies}")
 
@@ -57,7 +56,7 @@ class PrinterThread(QThread):
                 capture_output=True, 
                 text=True, 
                 check=True,  # Raises CalledProcessError on non-zero exit codes
-                timeout=180  # 3 minute timeout
+                timeout=config.printer_timeout  # Use config timeout
             )
 
             # Step 4: Check the result and wait for print job completion
@@ -133,7 +132,8 @@ class PrinterThread(QThread):
         import time
         
         print(f"Waiting for print job {job_id} to complete...")
-        max_wait_time = 300  # 5 minutes maximum wait
+        config = get_config()
+        max_wait_time = config.printer_timeout * 10  # 10x timeout for completion wait
         check_interval = 5   # Check every 5 seconds
         elapsed_time = 0
         
@@ -169,7 +169,7 @@ class PrinterThread(QThread):
         # Use the exact command format specified for Raspberry Pi
         command = [
             "lp",
-            "-d", "HP_Smart_Tank_580_590_series_5E0E1D_USB",
+            "-d", self.printer_name,
             "-o", f"print-color-mode={mode_str}",
             self.temp_pdf_path
         ]
@@ -200,7 +200,8 @@ class PrinterManager(QObject):
 
     def __init__(self):
         super().__init__()
-        self.printer_name = PRINTER_NAME
+        config = get_config()
+        self.printer_name = config.printer_name
         self.print_thread = None
         self.check_printer_availability()
 

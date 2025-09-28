@@ -5,20 +5,28 @@ import cv2
 import numpy as np
 from typing import List, Dict
 from PyQt5.QtCore import QObject, pyqtSignal, QThread
+from config import get_config
 
 class PDFColorAnalyzer:
     """Analyzes PDF pages to determine if they are black and white or colored."""
     
-    def __init__(self, black_price: float, color_price: float):
-        self.black_price = black_price
-        self.color_price = color_price
+    def __init__(self, black_price: float = None, color_price: float = None):
+        config = get_config()
+        self.black_price = black_price if black_price is not None else config.black_and_white_price
+        self.color_price = color_price if color_price is not None else config.color_price
 
     def is_page_black_only(self, page_image: np.ndarray,
-                          color_tolerance: int = 15,
-                          pixel_count_threshold: int = 200) -> bool:
+                          color_tolerance: int = None,
+                          pixel_count_threshold: int = None) -> bool:
         """Determines if a page image is black and white only."""
         if page_image.size == 0: 
             return True
+        
+        # Use config values if not provided
+        if color_tolerance is None or pixel_count_threshold is None:
+            config = get_config()
+            color_tolerance = color_tolerance or config.color_tolerance
+            pixel_count_threshold = pixel_count_threshold or config.pixel_count_threshold
         
         b, g, r = page_image[:, :, 0], page_image[:, :, 1], page_image[:, :, 2]
         channel_max = np.maximum(np.maximum(r, g), b)
@@ -27,8 +35,13 @@ class PDFColorAnalyzer:
         colored_pixel_count = np.count_nonzero(color_diff > color_tolerance)
         return colored_pixel_count < pixel_count_threshold
 
-    def analyze_pdf_pages(self, pdf_path: str, pages_to_check: List[int], user_wants_color: bool, dpi: int = 150) -> Dict:
+    def analyze_pdf_pages(self, pdf_path: str, pages_to_check: List[int], user_wants_color: bool, dpi: int = None) -> Dict:
         """Analyzes PDF pages and calculates pricing."""
+        # Use config DPI if not provided
+        if dpi is None:
+            config = get_config()
+            dpi = config.pdf_analysis_dpi
+            
         results = {
             'page_analysis': {}, 
             'pricing': {'black_pages_count': 0, 'color_pages_count': 0, 'base_cost': 0},
@@ -102,14 +115,15 @@ class PrintOptionsModel(QObject):
     
     def __init__(self):
         super().__init__()
-        self.analyzer = PDFColorAnalyzer(black_price=3.0, color_price=5.0)
+        config = get_config()
+        self.analyzer = PDFColorAnalyzer()  # Will use config values
         self.analysis_thread = None
         self.analysis_results = None
         
         self.selected_pdf = None
         self.selected_pages = None
         self._copies = 1
-        self._color_mode = "Black and White"
+        self._color_mode = config.default_color_mode
     
     def set_pdf_data(self, pdf_data, selected_pages):
         """Sets the PDF data and selected pages."""
@@ -119,7 +133,8 @@ class PrintOptionsModel(QObject):
         self.selected_pdf = pdf_data
         self.selected_pages = selected_pages
         self._copies = 1
-        self._color_mode = "Black and White"
+        config = get_config()
+        self._color_mode = config.default_color_mode
         print(f"🔍 Triggering analysis...")
         self.trigger_analysis()
     
@@ -134,11 +149,12 @@ class PrintOptionsModel(QObject):
     
     def change_copies(self, delta):
         """Changes the number of copies by the given delta."""
+        config = get_config()
         new_copies = self._copies + delta
-        if new_copies < 1: 
-            new_copies = 1
-        if new_copies > 99: 
-            new_copies = 99
+        if new_copies < config.min_copies: 
+            new_copies = config.min_copies
+        if new_copies > config.max_copies: 
+            new_copies = config.max_copies
         if new_copies != self._copies:
             self._copies = new_copies
             self.update_cost_display()
