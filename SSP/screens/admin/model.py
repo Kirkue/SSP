@@ -17,6 +17,7 @@ class AdminModel(QObject):
         self.sms_manager = get_sms_manager()
         self.paper_count = 100
         self.sms_alert_sent = False
+        self._loading_cmyk = False  # Flag to prevent recursive calls
         
         # Initialize the modem when the model is created
         self.sms_manager.initialize_modem()
@@ -205,6 +206,11 @@ class AdminModel(QObject):
 
     def load_cmyk_levels(self):
         """Loads the CMYK ink levels from the database and emits a signal."""
+        if self._loading_cmyk:
+            print("DEBUG: load_cmyk_levels already in progress, skipping")
+            return
+            
+        self._loading_cmyk = True
         try:
             cmyk_data = self.db_manager.get_cmyk_ink_levels()
             if cmyk_data:
@@ -222,6 +228,8 @@ class AdminModel(QObject):
         except Exception as e:
             print(f"Error loading CMYK levels: {e}")
             self.cmyk_levels_changed.emit(100.0, 100.0, 100.0, 100.0)
+        finally:
+            self._loading_cmyk = False
     
     def refresh_cmyk_levels(self):
         """Refresh CMYK levels from database (alias for load_cmyk_levels)."""

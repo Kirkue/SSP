@@ -32,9 +32,13 @@ class PrinterThread(QThread):
         # Create a new database manager for this thread to avoid SQLite thread safety issues
         if db_manager:
             from database.db_manager import DatabaseManager
+            print("DEBUG: Creating new database manager for printer thread")
             self.thread_db_manager = DatabaseManager()
+            print(f"DEBUG: Thread DB manager created: {self.thread_db_manager}")
             self.ink_analysis_manager = InkAnalysisManager(self.thread_db_manager)
+            print(f"DEBUG: Ink analysis manager created with thread DB manager")
         else:
+            print("DEBUG: No database manager provided, skipping ink analysis setup")
             self.thread_db_manager = None
             self.ink_analysis_manager = None
 
