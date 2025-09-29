@@ -266,6 +266,7 @@ class PrinterThread(QThread):
         print("DEBUG: Current thread for signal emission:", threading.current_thread().name)
         
         try:
+            # Emit signal directly - PyQt should handle cross-thread emission
             self.print_success.emit()
             print("DEBUG: print_success signal emitted from ink analysis callback")
             print("DEBUG: Signal emission completed successfully")
