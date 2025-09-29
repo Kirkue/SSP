@@ -20,7 +20,7 @@ class PrinterThread(QThread):
     print_failed = pyqtSignal(str)
     print_waiting = pyqtSignal()
 
-    def __init__(self, file_path, copies, color_mode, selected_pages, printer_name, db_manager=None):
+    def __init__(self, file_path, copies, color_mode, selected_pages, printer_name, ink_analysis_thread_manager=None):
         super().__init__()
         self.file_path = file_path
         self.copies = copies
@@ -28,31 +28,18 @@ class PrinterThread(QThread):
         self.selected_pages = sorted(selected_pages)
         self.printer_name = printer_name
         self.temp_pdf_path = None
-        self.db_manager = db_manager
-        # Store the database manager for later use in the thread
-        if db_manager:
-            print("DEBUG: Database manager provided, will create thread-specific connection in run()")
-            self.thread_db_manager = None  # Will be created in the thread
-            self.ink_analysis_manager = None  # Will be created in the thread
+        self.ink_analysis_thread_manager = ink_analysis_thread_manager
+        
+        if ink_analysis_thread_manager:
+            print("DEBUG: Ink analysis thread manager provided")
         else:
-            print("DEBUG: No database manager provided, skipping ink analysis setup")
-            self.thread_db_manager = None
-            self.ink_analysis_manager = None
+            print("DEBUG: No ink analysis thread manager provided, skipping ink analysis setup")
 
     def run(self):
         """The main logic for the printing thread."""
         if not PYMUPDF_AVAILABLE:
             self.print_failed.emit("PyMuPDF library is not installed.")
             return
-        
-        # Create database manager and ink analysis manager in this thread
-        if self.db_manager:
-            from database.db_manager import DatabaseManager
-            print("DEBUG: Creating database manager in printer thread")
-            self.thread_db_manager = DatabaseManager()
-            print(f"DEBUG: Thread DB manager created: {self.thread_db_manager}")
-            self.ink_analysis_manager = InkAnalysisManager(self.thread_db_manager)
-            print(f"DEBUG: Ink analysis manager created with thread DB manager")
 
         try:
             # Step 1: Create a temporary PDF with only the selected pages
@@ -209,12 +196,8 @@ class PrinterThread(QThread):
     def _analyze_and_update_ink_usage(self):
         """Analyze ink usage and update database after successful printing."""
         print("DEBUG: _analyze_and_update_ink_usage called")
-        if not self.ink_analysis_manager:
-            print("Warning: No ink analysis manager available, skipping ink analysis")
-            return
-        
-        if not self.thread_db_manager:
-            print("Warning: No thread database manager available, skipping ink analysis")
+        if not self.ink_analysis_thread_manager:
+            print("Warning: No ink analysis thread manager available, skipping ink analysis")
             return
         
         try:
@@ -223,24 +206,16 @@ class PrinterThread(QThread):
             print(f"DEBUG: Selected pages: {self.selected_pages}")
             print(f"DEBUG: Copies: {self.copies}")
             
-            # Use the original PDF file for analysis (not the temp file)
-            analysis_result = self.ink_analysis_manager.analyze_and_update_after_print(
+            # Queue the analysis operation in the dedicated thread
+            operation = self.ink_analysis_thread_manager.analyze_and_update(
                 pdf_path=self.file_path,
                 selected_pages=self.selected_pages,
                 copies=self.copies,
-                dpi=150  # Use standard DPI for analysis
+                dpi=150,
+                callback=self._on_ink_analysis_completed
             )
             
-            print(f"DEBUG: Analysis result: {analysis_result}")
-            
-            if analysis_result.get('success', False):
-                print("Ink analysis completed successfully")
-                if analysis_result.get('database_updated', False):
-                    print("Database updated with new ink levels")
-                else:
-                    print("Warning: Database update failed")
-            else:
-                print(f"Ink analysis failed: {analysis_result.get('error', 'Unknown error')}")
+            print("DEBUG: Ink analysis operation queued in dedicated thread")
                 
         except Exception as e:
             print(f"Error during ink analysis: {e}")
@@ -248,6 +223,21 @@ class PrinterThread(QThread):
             traceback.print_exc()
             # Don't fail the print job if ink analysis fails
             pass
+    
+    def _on_ink_analysis_completed(self, operation):
+        """Callback for when ink analysis is completed."""
+        if operation.error:
+            print(f"Ink analysis failed: {operation.error}")
+        else:
+            result = operation.result
+            if result.get('success', False):
+                print("Ink analysis completed successfully")
+                if result.get('database_updated', False):
+                    print("Database updated with new ink levels")
+                else:
+                    print("Warning: Database update failed")
+            else:
+                print(f"Ink analysis failed: {result.get('error', 'Unknown error')}")
 
     def cleanup_temp_pdf(self):
         """Deletes the temporary PDF file if it was created."""

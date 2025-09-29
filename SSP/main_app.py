@@ -18,6 +18,8 @@ from screens.data_viewer import DataViewerController
 from screens.thank_you import ThankYouController
 from database.models import init_db
 from managers.printer_manager import PrinterManager  # Import the new manager
+from managers.database_thread_manager import DatabaseThreadManager
+from managers.ink_analysis_thread_manager import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
 
 try:
@@ -53,10 +55,20 @@ class PrintingSystemApp(QMainWindow):
         self.payment_screen = PaymentController(self)
         self.admin_screen = AdminController(self)
         
-        # --- Initialize Printer Manager with database manager ---
-        print("Initializing printer manager with database connection...")
-        self.printer_manager = PrinterManager(self.admin_screen.db_manager)
-        print("Printer manager initialized with database connection.")
+        # --- Initialize Thread Managers ---
+        print("Initializing thread managers...")
+        self.database_thread_manager = DatabaseThreadManager()
+        self.ink_analysis_thread_manager = InkAnalysisThreadManager()
+        
+        # Start thread managers
+        self.database_thread_manager.start()
+        self.ink_analysis_thread_manager.start()
+        print("Thread managers started.")
+        
+        # --- Initialize Printer Manager with ink analysis thread manager ---
+        print("Initializing printer manager with ink analysis thread manager...")
+        self.printer_manager = PrinterManager(self.ink_analysis_thread_manager)
+        print("Printer manager initialized with ink analysis thread manager.")
         
         self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
         self.thank_you_screen = ThankYouController(self) # Initialize the new screen
@@ -191,6 +203,14 @@ class PrintingSystemApp(QMainWindow):
             
             cleanup_sms()
             print("SMS system cleaned up")
+            
+            # Clean up thread managers
+            if hasattr(self, 'database_thread_manager'):
+                self.database_thread_manager.stop()
+                print("Database thread manager stopped")
+            if hasattr(self, 'ink_analysis_thread_manager'):
+                self.ink_analysis_thread_manager.stop()
+                print("Ink analysis thread manager stopped")
         except Exception as e:
             print(f"Error during cleanup: {e}")
 
