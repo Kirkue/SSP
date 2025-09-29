@@ -34,22 +34,22 @@ class AdminScreenView(QWidget):
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(50, 30, 50, 30)
-        layout.setSpacing(20)
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(10)
 
         title = QLabel("Admin Panel")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: white; font-size: 48px; font-weight: bold; text-shadow: 2px 2px 4px #000000;")
+        title.setStyleSheet("color: white; font-size: 32px; font-weight: bold; text-shadow: 2px 2px 4px #000000;")
 
         content_frame = self._create_content_frame()
         
         back_button = QPushButton("← Back to Main Screen")
-        back_button.setMinimumHeight(60)
+        back_button.setMinimumHeight(40)
         back_button.setCursor(Qt.PointingHandCursor)
         back_button.setStyleSheet("""
             QPushButton {
-                background-color: #c83c3c; color: white; font-size: 20px; font-weight: bold;
-                border: 1px solid #d85050; border-radius: 10px; padding: 10px;
+                background-color: #c83c3c; color: white; font-size: 16px; font-weight: bold;
+                border: 1px solid #d85050; border-radius: 8px; padding: 8px;
             }
             QPushButton:hover { background-color: #e05a5a; }
         """)
@@ -70,8 +70,8 @@ class AdminScreenView(QWidget):
             }
         """)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(25)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
         layout.addWidget(self._create_paper_management_group())
         layout.addWidget(self._create_coin_management_group())
         layout.addWidget(self._create_cmyk_management_group())
