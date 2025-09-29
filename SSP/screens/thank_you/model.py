@@ -63,12 +63,21 @@ class ThankYouModel(QObject):
             
             # Connect to printer signals as primary method
             print("Thank you screen: Connecting to printer signals...")
-            main_app.printer_manager.print_job_successful.connect(self._on_print_success)
-            main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
-            print("Thank you screen: Printer signals connected")
+            try:
+                main_app.printer_manager.print_job_successful.connect(self._on_print_success)
+                print("Thank you screen: print_job_successful signal connected")
+                main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
+                print("Thank you screen: print_job_failed signal connected")
+                print("Thank you screen: Printer signals connected successfully")
+            except Exception as e:
+                print(f"Thank you screen: Error connecting signals: {e}")
+                import traceback
+                traceback.print_exc()
             
             # Start the print job
+            print("Thank you screen: About to call _start_print_job...")
             self._start_print_job(main_app)
+            print("Thank you screen: _start_print_job completed")
             
             # Start periodic printer status check as fallback (every 5 seconds)
             self.status_check_timer.start(5000)  # Check every 5 seconds
@@ -148,11 +157,14 @@ class ThankYouModel(QObject):
     
     def _start_print_job(self, main_app):
         """Start the print job using stored print job details."""
+        print("Thank you screen: _start_print_job called")
+        
         if hasattr(main_app, 'current_print_job') and main_app.current_print_job:
             print("Thank you screen: Starting print job with stored details...")
             print(f"Thank you screen: Print job details: {main_app.current_print_job}")
             
             try:
+                print("Thank you screen: About to call printer_manager.print_file...")
                 main_app.printer_manager.print_file(
                     file_path=main_app.current_print_job['file_path'],
                     selected_pages=main_app.current_print_job['selected_pages'],
@@ -161,8 +173,11 @@ class ThankYouModel(QObject):
                 )
                 print("Thank you screen: Print job started successfully")
                 self.print_job_started = True  # Mark that print job has been started
+                print("Thank you screen: print_job_started flag set to True")
             except Exception as e:
                 print(f"Thank you screen: Error starting print job: {e}")
+                import traceback
+                traceback.print_exc()
                 self.show_printing_error(f"Failed to start print job: {e}")
         else:
             print("Thank you screen: No print job details found")
