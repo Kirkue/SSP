@@ -317,10 +317,10 @@ class PaymentModel(QObject):
         
         self.payment_completed.emit(payment_info)
         
-        # Handle change dispensing
+        # NEW FLOW: Handle change dispensing FIRST, then print
         if change_amount > 0:
             print(f"DEBUG: Starting change dispensing for ₱{change_amount:.2f}")
-            self.payment_status_updated.emit(f"Printing... Now dispensing change: ₱{change_amount:.2f}")
+            self.payment_status_updated.emit(f"Dispensing change: ₱{change_amount:.2f}")
             # Get admin screen from main_app to pass to dispense thread
             admin_screen = None
             if hasattr(self, 'main_app') and hasattr(self.main_app, 'admin_screen'):
@@ -348,19 +348,96 @@ class PaymentModel(QObject):
             self.dispense_thread.start()
             print("DEBUG: Dispense thread started")
         else:
-            print("DEBUG: No change to dispense, calling _on_dispensing_finished directly")
-            self._on_dispensing_finished(True)
+            print("DEBUG: No change to dispense, starting printing directly")
+            self._start_printing()
         
         return True, "Payment completed successfully"
     
-    def _on_dispensing_finished(self, success):
+    def _on_dispensing_finished(self, result):
         """Handles the completion of change dispensing."""
-        print(f"DEBUG: _on_dispensing_finished called with success={success}")
-        if success:
-            print("Dispensing complete.")
+        print(f"DEBUG: _on_dispensing_finished called with result={result}")
+        
+        if isinstance(result, dict) and result.get('success', False):
+            # New flow: Update database with actual coins dispensed, then print
+            coins_1 = result.get('coins_1', 0)
+            coins_5 = result.get('coins_5', 0)
+            actual_change = result.get('actual_change', 0)
+            expected_change = result.get('expected_change', 0)
+            
+            print(f"DEBUG: Change dispensing completed - ₱1={coins_1}, ₱5={coins_5}, actual={actual_change}, expected={expected_change}")
+            
+            # Update database with actual coins dispensed
+            if hasattr(self, 'main_app') and hasattr(self.main_app, 'database_thread_manager'):
+                print("DEBUG: Updating coin inventory in database...")
+                self.main_app.database_thread_manager.update_coin_inventory(
+                    coins_1, coins_5, 
+                    callback=self._on_coin_inventory_updated
+                )
+            else:
+                print("DEBUG: No database thread manager available, proceeding to print")
+                self._start_printing()
         else:
-            print("CRITICAL: Error dispensing change.")
-        # Navigate to thank you screen after dispensing is complete
+            # Fallback for old boolean format
+            print(f"DEBUG: Old format result: {result}")
+            if result:
+                print("Dispensing complete.")
+                self._start_printing()
+            else:
+                print("CRITICAL: Error dispensing change.")
+                self._navigate_to_thank_you()
+    
+    def _on_coin_inventory_updated(self, operation):
+        """Handles the completion of coin inventory update."""
+        print(f"DEBUG: Coin inventory updated: {operation.result}")
+        if operation.error:
+            print(f"ERROR: Failed to update coin inventory: {operation.error}")
+        else:
+            print("DEBUG: Coin inventory successfully updated")
+        
+        # Now start printing
+        self._start_printing()
+    
+    def _start_printing(self):
+        """Start the printing process after change has been dispensed."""
+        print("DEBUG: Starting printing process...")
+        self.payment_status_updated.emit("Change dispensed. Starting to print...")
+        
+        # Start the print job
+        if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
+            print("DEBUG: Starting print job...")
+            
+            # Connect printer signals if not already connected
+            if not hasattr(self, '_printer_signals_connected'):
+                self.main_app.printer_manager.print_job_successful.connect(self._on_print_success)
+                self.main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
+                self._printer_signals_connected = True
+                print("DEBUG: Printer signals connected")
+            
+            self.main_app.printer_manager.print_file(
+                file_path=self.print_file_path,
+                selected_pages=self.selected_pages,
+                copies=self.copies,
+                color_mode=self.color_mode
+            )
+        else:
+            print("DEBUG: No printer manager available")
+            self._navigate_to_thank_you()
+    
+    def _on_print_success(self):
+        """Handles successful print completion."""
+        print("DEBUG: Print job completed successfully")
+        self.payment_status_updated.emit("Print completed successfully!")
+        self._navigate_to_thank_you()
+    
+    def _on_print_failed(self, error_message):
+        """Handles print job failure."""
+        print(f"DEBUG: Print job failed: {error_message}")
+        self.payment_status_updated.emit(f"Print failed: {error_message}")
+        # Still navigate to thank you screen even if print fails
+        self._navigate_to_thank_you()
+    
+    def _navigate_to_thank_you(self):
+        """Navigate to thank you screen."""
         if hasattr(self, 'main_app') and self.main_app:
             print("DEBUG: Navigating to thank you screen")
             self.main_app.show_screen('thank_you')

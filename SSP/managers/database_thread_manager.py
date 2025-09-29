@@ -77,6 +77,8 @@ class DatabaseThreadManager(QObject):
                     self._handle_get_coin_counts(operation)
                 elif operation.operation_type == "update_coin_counts":
                     self._handle_update_coin_counts(operation)
+                elif operation.operation_type == "update_coin_inventory":
+                    self._handle_update_coin_inventory(operation)
                 else:
                     print(f"Unknown operation type: {operation.operation_type}")
                     operation.error = f"Unknown operation type: {operation.operation_type}"
@@ -172,6 +174,41 @@ class DatabaseThreadManager(QObject):
             operation.error = str(e)
             print(f"Error updating coin counts: {e}")
     
+    def _handle_update_coin_inventory(self, operation):
+        """Handle updating coin inventory after dispensing."""
+        try:
+            coins_1 = operation.data['coins_1']
+            coins_5 = operation.data['coins_5']
+            
+            print(f"DEBUG: Updating coin inventory - deducting ₱1={coins_1}, ₱5={coins_5}")
+            
+            # Get current inventory
+            inventory = self.db_manager.get_cash_inventory()
+            current_1 = 0
+            current_5 = 0
+            
+            for item in inventory:
+                if item['denomination'] == 1 and item['type'] == 'coin':
+                    current_1 = item['count']
+                elif item['denomination'] == 5 and item['type'] == 'coin':
+                    current_5 = item['count']
+            
+            # Calculate new counts
+            new_1 = max(0, current_1 - coins_1)
+            new_5 = max(0, current_5 - coins_5)
+            
+            # Update inventory
+            self.db_manager.update_cash_inventory(1, new_1, 'coin')
+            self.db_manager.update_cash_inventory(5, new_5, 'coin')
+            
+            print(f"DEBUG: Coin inventory updated - ₱1: {current_1} -> {new_1}, ₱5: {current_5} -> {new_5}")
+            
+            operation.result = {'coins_1': new_1, 'coins_5': new_5}
+            self.operation_completed.emit("update_coin_inventory", True)
+        except Exception as e:
+            operation.error = str(e)
+            print(f"Error updating coin inventory: {e}")
+    
     # Public methods for queuing operations
     def get_cmyk_levels(self, callback=None):
         """Queue a get CMYK levels operation."""
@@ -196,6 +233,14 @@ class DatabaseThreadManager(QObject):
     def update_paper_count(self, count, callback=None):
         """Queue an update paper count operation."""
         operation = DatabaseOperation("update_paper_count", {'count': count}, callback)
+        self.operation_queue.put(operation)
+        return operation
+    
+    def update_coin_inventory(self, coins_1, coins_5, callback=None):
+        """Queue an update coin inventory operation."""
+        operation = DatabaseOperation("update_coin_inventory", {
+            'coins_1': coins_1, 'coins_5': coins_5
+        }, callback)
         self.operation_queue.put(operation)
         return operation
     

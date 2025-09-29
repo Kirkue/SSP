@@ -164,9 +164,9 @@ class ChangeDispenser:
                 self.simulated = True
 
     def dispense_change(self, amount: float, status_callback=None, admin_screen=None, database_thread_manager=None):
-        """Calculates and dispenses the correct change, one coin at a time."""
+        """Calculates and dispenses the correct change, one coin at a time. Returns actual coins dispensed."""
         if amount <= 0:
-            return True
+            return {'success': True, 'coins_1': 0, 'coins_5': 0}
 
         num_fives = int(amount // 5)
         num_ones = int(round(amount % 5))
@@ -175,19 +175,9 @@ class ChangeDispenser:
         if status_callback:
             status_callback(f"Preparing to dispense ₱{amount:.2f}...")
 
-        # Update coin inventory using database thread manager if available
-        if database_thread_manager:
-            # Use database thread manager for thread-safe operations
-            print("DEBUG: Using database thread manager for coin inventory")
-            # For now, skip the inventory check to avoid blocking
-            # TODO: Implement proper async coin inventory checking
-            print(f"DEBUG: Would check inventory for ₱1={num_ones}, ₱5={num_fives}")
-        elif admin_screen and hasattr(admin_screen, 'model'):
-            # Fallback to old method (may cause thread safety issues)
-            if not admin_screen.model.decrement_coins(num_ones, num_fives):
-                error_msg = "CRITICAL: Not enough coins in inventory. Please contact admin."
-                if status_callback: status_callback(error_msg)
-                return False
+        # Track actual coins dispensed
+        actual_fives = 0
+        actual_ones = 0
 
         # Dispense 5-peso coins
         for i in range(num_fives):
@@ -201,10 +191,15 @@ class ChangeDispenser:
             else:
                 success = self.hoppers['B'].dispense_single_coin()
 
-            if not success:
-                error_msg = "CRITICAL: Failed to dispense ₱5 coin. Please contact admin."
+            if success:
+                actual_fives += 1
+                print(f"DEBUG: Successfully dispensed ₱5 coin {actual_fives}/{num_fives}")
+            else:
+                error_msg = f"CRITICAL: Failed to dispense ₱5 coin {i + 1}. Dispensed {actual_fives}/{num_fives} so far."
                 if status_callback: status_callback(error_msg)
-                return False
+                print(error_msg)
+                # Continue with what we have instead of failing completely
+                break
 
         # Dispense 1-peso coins
         for i in range(num_ones):
@@ -218,15 +213,31 @@ class ChangeDispenser:
             else:
                 success = self.hoppers['A'].dispense_single_coin()
 
-            if not success:
-                error_msg = "CRITICAL: Failed to dispense ₱1 coin. Please contact admin."
+            if success:
+                actual_ones += 1
+                print(f"DEBUG: Successfully dispensed ₱1 coin {actual_ones}/{num_ones}")
+            else:
+                error_msg = f"CRITICAL: Failed to dispense ₱1 coin {i + 1}. Dispensed {actual_ones}/{num_ones} so far."
                 if status_callback: status_callback(error_msg)
-                return False
+                print(error_msg)
+                # Continue with what we have instead of failing completely
+                break
         
-        final_msg = "Change dispensing complete."
+        # Calculate actual change dispensed
+        actual_change = (actual_fives * 5) + (actual_ones * 1)
+        expected_change = (num_fives * 5) + (num_ones * 1)
+        
+        final_msg = f"Change dispensing complete. Dispensed ₱{actual_change:.2f} (₱{actual_fives}x5 + ₱{actual_ones}x1) of ₱{expected_change:.2f} expected."
         if status_callback: status_callback(final_msg)
         print(final_msg)
-        return True
+        
+        return {
+            'success': True,
+            'coins_1': actual_ones,
+            'coins_5': actual_fives,
+            'actual_change': actual_change,
+            'expected_change': expected_change
+        }
     
     def cleanup(self):
         """Safely shut down all hoppers and the pigpio connection."""
@@ -241,7 +252,7 @@ class ChangeDispenser:
 class DispenseThread(QThread):
     """A dedicated thread to run the dispensing logic without freezing the GUI."""
     status_update = pyqtSignal(str)
-    dispensing_finished = pyqtSignal(bool)
+    dispensing_finished = pyqtSignal(dict)  # Changed to emit the full result dict
 
     def __init__(self, dispenser: ChangeDispenser, amount: float, admin_screen=None, database_thread_manager=None):
         super().__init__()
@@ -252,10 +263,10 @@ class DispenseThread(QThread):
 
     def run(self):
         """This method is executed when the thread starts."""
-        success = self.dispenser.dispense_change(
+        result = self.dispenser.dispense_change(
             self.amount, 
             self.status_update.emit, 
             self.admin_screen, 
             self.database_thread_manager
         )
-        self.dispensing_finished.emit(success)
+        self.dispensing_finished.emit(result)
