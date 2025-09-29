@@ -65,6 +65,9 @@ class PrintingSystemApp(QMainWindow):
         self.ink_analysis_thread_manager.start()
         print("Thread managers started.")
         
+        # Connect thread managers for real-time updates
+        self._connect_thread_managers()
+        
         # --- Initialize Printer Manager with ink analysis thread manager ---
         print("Initializing printer manager with ink analysis thread manager...")
         self.printer_manager = PrinterManager(self.ink_analysis_thread_manager)
@@ -96,6 +99,19 @@ class PrintingSystemApp(QMainWindow):
             }
         """)
         print("Main app initialization complete")
+    
+    def _connect_thread_managers(self):
+        """Connect thread managers for real-time updates."""
+        # Connect ink analysis updates to database thread manager
+        self.ink_analysis_thread_manager.analysis_completed.connect(self._on_ink_analysis_completed)
+        print("Thread managers connected for real-time updates")
+    
+    def _on_ink_analysis_completed(self, result):
+        """Handle ink analysis completion and forward CMYK updates."""
+        if result.get('database_updated', False) and 'cmyk_levels' in result:
+            print(f"Main app received CMYK update: {result['cmyk_levels']}")
+            # Forward the update to database thread manager
+            self.database_thread_manager.cmyk_levels_updated.emit(result['cmyk_levels'])
 
         # Connect payment and printing signals
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
