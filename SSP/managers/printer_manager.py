@@ -107,14 +107,15 @@ class PrinterThread(QThread):
             print("DEBUG: About to start ink analysis...")
             try:
                 self._analyze_and_update_ink_usage()
-                print("DEBUG: Ink analysis completed successfully")
+                print("DEBUG: Ink analysis operation queued, waiting for completion...")
+                # Don't emit print_success here - wait for ink analysis callback
             except Exception as e:
                 print(f"DEBUG: Ink analysis failed: {e}")
                 print("DEBUG: Continuing despite ink analysis failure...")
-            
-            print("DEBUG: Emitting print_success signal...")
-            self.print_success.emit()
-            print("DEBUG: print_success signal emitted")
+                # If ink analysis fails, emit success immediately
+                print("DEBUG: Emitting print_success signal due to ink analysis failure...")
+                self.print_success.emit()
+                print("DEBUG: print_success signal emitted")
 
         except subprocess.TimeoutExpired:
             self.print_failed.emit("Printing command timed out.")
@@ -258,6 +259,11 @@ class PrinterThread(QThread):
                     print("Warning: Database update failed")
             else:
                 print(f"Ink analysis failed: {result.get('error', 'Unknown error')}")
+        
+        # Emit print_success signal now that ink analysis is complete
+        print("DEBUG: Ink analysis completed, emitting print_success signal...")
+        self.print_success.emit()
+        print("DEBUG: print_success signal emitted from ink analysis callback")
 
     def cleanup_temp_pdf(self):
         """Deletes the temporary PDF file if it was created."""
