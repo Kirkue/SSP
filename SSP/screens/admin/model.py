@@ -222,6 +222,10 @@ class AdminModel(QObject):
         except Exception as e:
             print(f"Error loading CMYK levels: {e}")
             self.cmyk_levels_changed.emit(100.0, 100.0, 100.0, 100.0)
+    
+    def refresh_cmyk_levels(self):
+        """Refresh CMYK levels from database (alias for load_cmyk_levels)."""
+        self.load_cmyk_levels()
 
     def update_cmyk_levels(self, cyan: float, magenta: float, yellow: float, black: float):
         """Updates CMYK ink levels in the database."""

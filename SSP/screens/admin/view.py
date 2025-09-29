@@ -18,6 +18,7 @@ class AdminScreenView(QWidget):
     reset_coins_clicked = pyqtSignal()
     update_cmyk_clicked = pyqtSignal(float, float, float, float)
     reset_cmyk_clicked = pyqtSignal()
+    refresh_cmyk_clicked = pyqtSignal()
 
     def __init__(self, background_image_path=None):
         super().__init__()
@@ -287,9 +288,15 @@ class AdminScreenView(QWidget):
         reset_cmyk_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="12px"))
         reset_cmyk_btn.setFixedHeight(30)
         
+        refresh_cmyk_btn = QPushButton("Refresh", 
+                                     clicked=self.refresh_cmyk_clicked.emit)
+        refresh_cmyk_btn.setStyleSheet(self._get_button_style("#17a2b8", "#138496", font_size="12px"))
+        refresh_cmyk_btn.setFixedHeight(30)
+        
         button_layout.addStretch()
         button_layout.addWidget(update_cmyk_btn)
         button_layout.addWidget(reset_cmyk_btn)
+        button_layout.addWidget(refresh_cmyk_btn)
         button_layout.addStretch()
         layout.addLayout(button_layout)
         
