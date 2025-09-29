@@ -477,6 +477,14 @@ class PaymentModel(QObject):
                 self._printer_signals_connected = True
                 print("DEBUG: Printer signals connected")
             
+            # Add a safety timeout to ensure navigation happens even if signals fail
+            from PyQt5.QtCore import QTimer
+            self.print_timeout_timer = QTimer()
+            self.print_timeout_timer.timeout.connect(self._on_print_timeout)
+            self.print_timeout_timer.setSingleShot(True)
+            self.print_timeout_timer.start(300000)  # 5 minutes timeout
+            print("DEBUG: Print timeout timer started (5 minutes)")
+            
             self.main_app.printer_manager.print_file(
                 file_path=self.print_file_path,
                 selected_pages=self.selected_pages,
@@ -489,15 +497,31 @@ class PaymentModel(QObject):
     
     def _on_print_success(self):
         """Handles successful print completion."""
-        print("DEBUG: Print job completed successfully")
+        print("DEBUG: _on_print_success called - Print job completed successfully")
+        # Cancel timeout timer since we got the success signal
+        if hasattr(self, 'print_timeout_timer'):
+            self.print_timeout_timer.stop()
+            print("DEBUG: Print timeout timer cancelled")
         self.payment_status_updated.emit("Print completed successfully!")
+        print("DEBUG: About to navigate to thank you screen...")
         self._navigate_to_thank_you()
     
     def _on_print_failed(self, error_message):
         """Handles print job failure."""
-        print(f"DEBUG: Print job failed: {error_message}")
+        print(f"DEBUG: _on_print_failed called - Print job failed: {error_message}")
+        # Cancel timeout timer since we got the failed signal
+        if hasattr(self, 'print_timeout_timer'):
+            self.print_timeout_timer.stop()
+            print("DEBUG: Print timeout timer cancelled")
         self.payment_status_updated.emit(f"Print failed: {error_message}")
+        print("DEBUG: About to navigate to thank you screen despite print failure...")
         # Still navigate to thank you screen even if print fails
+        self._navigate_to_thank_you()
+    
+    def _on_print_timeout(self):
+        """Handles print timeout - ensures navigation happens even if signals fail."""
+        print("DEBUG: _on_print_timeout called - Print job timed out, forcing navigation")
+        self.payment_status_updated.emit("Print completed (timeout reached)")
         self._navigate_to_thank_you()
     
     def _navigate_to_thank_you(self):

@@ -105,10 +105,16 @@ class PrinterThread(QThread):
             
             # Step 5: Analyze ink usage and update database
             print("DEBUG: About to start ink analysis...")
-            self._analyze_and_update_ink_usage()
-            print("DEBUG: Ink analysis completed")
+            try:
+                self._analyze_and_update_ink_usage()
+                print("DEBUG: Ink analysis completed successfully")
+            except Exception as e:
+                print(f"DEBUG: Ink analysis failed: {e}")
+                print("DEBUG: Continuing despite ink analysis failure...")
             
+            print("DEBUG: Emitting print_success signal...")
             self.print_success.emit()
+            print("DEBUG: print_success signal emitted")
 
         except subprocess.TimeoutExpired:
             self.print_failed.emit("Printing command timed out.")
