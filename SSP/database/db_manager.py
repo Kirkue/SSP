@@ -283,13 +283,25 @@ class DatabaseManager:
             """)
             result = cursor.fetchone()
             if result:
-                return {
-                    'cyan': float(result['cyan_level']),
-                    'magenta': float(result['magenta_level']),
-                    'yellow': float(result['yellow_level']),
-                    'black': float(result['black_level']),
-                    'last_updated': result['last_updated']
-                }
+                try:
+                    return {
+                        'cyan': float(result['cyan_level']),
+                        'magenta': float(result['magenta_level']),
+                        'yellow': float(result['yellow_level']),
+                        'black': float(result['black_level']),
+                        'last_updated': result['last_updated']
+                    }
+                except (ValueError, TypeError) as e:
+                    print(f"Error converting CMYK values from database: {e}")
+                    print(f"Raw values: cyan={result['cyan_level']}, magenta={result['magenta_level']}, yellow={result['yellow_level']}, black={result['black_level']}")
+                    # Return default values if conversion fails
+                    return {
+                        'cyan': 100.0,
+                        'magenta': 100.0,
+                        'yellow': 100.0,
+                        'black': 100.0,
+                        'last_updated': result['last_updated']
+                    }
             return None
         except sqlite3.Error as e:
             print(f"Error getting CMYK ink levels: {e}")
@@ -300,15 +312,26 @@ class DatabaseManager:
         if not self.conn:
             return False
         try:
+            # Ensure values are properly converted to float
+            cyan_float = float(cyan)
+            magenta_float = float(magenta)
+            yellow_float = float(yellow)
+            black_float = float(black)
+            
+            print(f"DEBUG: Storing CMYK values as floats: C:{cyan_float}, M:{magenta_float}, Y:{yellow_float}, K:{black_float}")
+            
             cursor = self.conn.cursor()
             cursor.execute("""
                 INSERT INTO cmyk_ink_levels (cyan_level, magenta_level, yellow_level, black_level, timestamp, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (cyan, magenta, yellow, black, datetime.now(), datetime.now()))
+            """, (cyan_float, magenta_float, yellow_float, black_float, datetime.now(), datetime.now()))
             self.conn.commit()
             return True
         except sqlite3.Error as e:
             print(f"Error updating CMYK ink levels: {e}")
+            return False
+        except ValueError as e:
+            print(f"Error converting CMYK values to float: {e}")
             return False
 
     def get_cmyk_ink_history(self, limit=10):
