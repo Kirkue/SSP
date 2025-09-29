@@ -265,7 +265,13 @@ class DatabaseManager:
     # --- NEW: CMYK Ink Level Methods ---
     def get_cmyk_ink_levels(self):
         """Get the current CMYK ink levels."""
+        import threading
+        current_thread = threading.current_thread()
+        print(f"DEBUG: get_cmyk_ink_levels called from thread: {current_thread.name} (id: {current_thread.ident})")
+        print(f"DEBUG: Database connection: {self.conn}")
+        
         if not self.conn:
+            print("DEBUG: No database connection available")
             return None
         try:
             cursor = self.conn.cursor()

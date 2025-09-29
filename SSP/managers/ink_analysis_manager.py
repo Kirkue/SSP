@@ -225,6 +225,9 @@ class InkAnalysisManager:
             print("Warning: No database manager provided, cannot update ink levels")
             return False
         
+        print(f"DEBUG: Using database manager: {self.db_manager}")
+        print(f"DEBUG: Database manager type: {type(self.db_manager)}")
+        
         if not analysis_result.get('success', False):
             print("Warning: Analysis failed, cannot update ink levels")
             return False
