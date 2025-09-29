@@ -14,10 +14,10 @@ except ImportError:
 
 
 # --- General Configuration ---
-COIN_DELAY = 0.5         # Delay after a successful dispense before next one
-DISPENSING_TIMEOUT = 10  # Maximum time to wait for a single coin
+COIN_DELAY = 1.0         # Delay after a successful dispense before next one (increased from 0.5)
+DISPENSING_TIMEOUT = 15  # Maximum time to wait for a single coin (increased from 10)
 MAX_RETRY_ATTEMPTS = 3   # Maximum attempts per coin before giving up
-RETRY_DELAY = 0.5        # Delay between retry attempts
+RETRY_DELAY = 1.0        # Delay between retry attempts (increased from 0.5)
 
 # --- Centralized configuration for the two hoppers ---
 # Hopper A dispenses 1-peso coins
@@ -107,6 +107,8 @@ class HopperController:
 
     def _dispense_single_coin_attempt(self):
         self._enable_hopper()
+        # Give the motor time to spin and start dispensing
+        time.sleep(0.5)  # Wait 500ms for motor to spin up
         success = self._wait_for_coin_passage()
         self._disable_hopper()
         return success

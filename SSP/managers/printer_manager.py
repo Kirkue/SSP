@@ -71,24 +71,37 @@ class PrinterThread(QThread):
             
             # Extract job ID from the output (format: "request id is HP_Smart_Tank_580_590_series_5E0E1D_USB-1 (1 file(s))")
             job_id = None
+            print(f"DEBUG: Full CUPS output: '{process.stdout}'")
             if "request id is" in process.stdout:
                 try:
-                    job_id = process.stdout.split("request id is")[1].split()[0]
-                    print(f"Print job ID: {job_id}")
-                except:
-                    print("Could not extract job ID from output")
+                    # More robust job ID extraction
+                    parts = process.stdout.split("request id is")
+                    if len(parts) > 1:
+                        job_id_part = parts[1].strip()
+                        # Extract the job ID (everything before the first space or parenthesis)
+                        job_id = job_id_part.split()[0].split('(')[0]
+                        print(f"Print job ID extracted: '{job_id}'")
+                    else:
+                        print("Could not find job ID in output")
+                except Exception as e:
+                    print(f"Error extracting job ID: {e}")
+            else:
+                print("No 'request id is' found in CUPS output")
             
             # Wait for the print job to actually complete
             if job_id:
                 # Signal that we're now waiting for actual printing to complete
                 self.print_waiting.emit()
-                self.wait_for_print_completion(job_id)
+                print(f"DEBUG: Starting to wait for print job {job_id} to complete...")
+                completion_success = self.wait_for_print_completion(job_id)
+                if not completion_success:
+                    print("WARNING: Print job completion check failed, but continuing...")
             else:
                 # If we can't get job ID, wait a reasonable time for printing
-                print("Waiting 30 seconds for print job to complete...")
+                print("WARNING: No job ID available, waiting 60 seconds for print job to complete...")
                 self.print_waiting.emit()
                 import time
-                time.sleep(30)
+                time.sleep(60)  # Increased from 30 to 60 seconds
             
             # Step 5: Analyze ink usage and update database
             print("DEBUG: About to start ink analysis...")
