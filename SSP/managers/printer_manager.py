@@ -29,19 +29,11 @@ class PrinterThread(QThread):
         self.printer_name = printer_name
         self.temp_pdf_path = None
         self.db_manager = db_manager
-        # Create a new database manager for this thread to avoid SQLite thread safety issues
+        # Store the database manager for later use in the thread
         if db_manager:
-            from database.db_manager import DatabaseManager
-            print("DEBUG: Creating new database manager for printer thread")
-            # Create a completely new database manager with a fresh connection
-            self.thread_db_manager = DatabaseManager()
-            print(f"DEBUG: Thread DB manager created: {self.thread_db_manager}")
-            # Force a new connection in this thread
-            self.thread_db_manager.close()  # Close any existing connection
-            self.thread_db_manager.connect()  # Create new connection in this thread
-            print(f"DEBUG: New database connection created in printer thread")
-            self.ink_analysis_manager = InkAnalysisManager(self.thread_db_manager)
-            print(f"DEBUG: Ink analysis manager created with thread DB manager")
+            print("DEBUG: Database manager provided, will create thread-specific connection in run()")
+            self.thread_db_manager = None  # Will be created in the thread
+            self.ink_analysis_manager = None  # Will be created in the thread
         else:
             print("DEBUG: No database manager provided, skipping ink analysis setup")
             self.thread_db_manager = None
@@ -52,6 +44,15 @@ class PrinterThread(QThread):
         if not PYMUPDF_AVAILABLE:
             self.print_failed.emit("PyMuPDF library is not installed.")
             return
+        
+        # Create database manager and ink analysis manager in this thread
+        if self.db_manager:
+            from database.db_manager import DatabaseManager
+            print("DEBUG: Creating database manager in printer thread")
+            self.thread_db_manager = DatabaseManager()
+            print(f"DEBUG: Thread DB manager created: {self.thread_db_manager}")
+            self.ink_analysis_manager = InkAnalysisManager(self.thread_db_manager)
+            print(f"DEBUG: Ink analysis manager created with thread DB manager")
 
         try:
             # Step 1: Create a temporary PDF with only the selected pages
