@@ -29,7 +29,14 @@ class PrinterThread(QThread):
         self.printer_name = printer_name
         self.temp_pdf_path = None
         self.db_manager = db_manager
-        self.ink_analysis_manager = InkAnalysisManager(db_manager) if db_manager else None
+        # Create a new database manager for this thread to avoid SQLite thread safety issues
+        if db_manager:
+            from database.db_manager import DatabaseManager
+            self.thread_db_manager = DatabaseManager()
+            self.ink_analysis_manager = InkAnalysisManager(self.thread_db_manager)
+        else:
+            self.thread_db_manager = None
+            self.ink_analysis_manager = None
 
     def run(self):
         """The main logic for the printing thread."""
@@ -196,8 +203,8 @@ class PrinterThread(QThread):
             print("Warning: No ink analysis manager available, skipping ink analysis")
             return
         
-        if not self.db_manager:
-            print("Warning: No database manager available, skipping ink analysis")
+        if not self.thread_db_manager:
+            print("Warning: No thread database manager available, skipping ink analysis")
             return
         
         try:
