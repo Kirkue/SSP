@@ -79,13 +79,10 @@ class ThankYouModel(QObject):
             self._start_print_job(main_app)
             print("Thank you screen: _start_print_job completed")
             
-            # Start periodic printer status check as fallback (every 5 seconds)
-            self.status_check_timer.start(5000)  # Check every 5 seconds
-            print("Thank you screen: Printer status check started as fallback (every 5 seconds)")
-            
-            # Start a safety timeout in case both methods fail (2 minutes)
-            self.redirect_timer.start(120000)  # 2 minute safety timeout
-            print("Thank you screen: Safety timeout started (2 minutes)")
+            # Start timers using QTimer.singleShot to ensure they run in main thread
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, self._start_timers)
+            print("Thank you screen: Timer start queued for main thread")
         else:
             print("Thank you screen: ERROR - No printer manager found!")
             # Fallback: start timer if no printer manager
@@ -212,6 +209,18 @@ class ThankYouModel(QObject):
             print("Thank you screen: Fallback - lpstat command timed out")
         except Exception as e:
             print(f"Thank you screen: Fallback - Error checking printer status: {e}")
+    
+    def _start_timers(self):
+        """Start the timers in the main thread."""
+        print("Thank you screen: Starting timers in main thread...")
+        
+        # Start periodic printer status check as fallback (every 5 seconds)
+        self.status_check_timer.start(5000)  # Check every 5 seconds
+        print("Thank you screen: Printer status check started as fallback (every 5 seconds)")
+        
+        # Start a safety timeout in case both methods fail (2 minutes)
+        self.redirect_timer.start(120000)  # 2 minute safety timeout
+        print("Thank you screen: Safety timeout started (2 minutes)")
     
     def _on_print_failed(self, error_message):
         """Handles print job failure."""
