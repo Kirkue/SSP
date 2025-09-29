@@ -406,6 +406,14 @@ class PaymentModel(QObject):
             else:
                 print("CRITICAL: Error dispensing change.")
                 self._navigate_to_thank_you()
+        
+        # Clean up change dispenser after dispensing is complete
+        try:
+            if hasattr(self, 'change_dispenser'):
+                print("DEBUG: Cleaning up change dispenser after dispensing complete")
+                self.change_dispenser.cleanup()
+        except Exception as e:
+            print(f"DEBUG: Error cleaning up change dispenser: {e}")
     
     def _on_coin_inventory_updated(self, operation):
         """Handles the completion of coin inventory update."""
@@ -572,12 +580,9 @@ class PaymentModel(QObject):
                 self.gpio_thread.terminate()
                 self.gpio_thread.wait(1000)
         
-        # Clean up change dispenser
-        try:
-            if hasattr(self, 'change_dispenser'):
-                self.change_dispenser.cleanup()
-        except Exception as e:
-            print(f"Error cleaning up change dispenser: {e}")
+        # Don't cleanup change dispenser immediately - it might still be dispensing
+        # The cleanup will happen when the dispensing thread completes
+        print("Payment screen: Skipping hopper cleanup - dispensing may still be in progress")
         
         # Stop any running dispense thread
         if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
