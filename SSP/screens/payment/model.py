@@ -501,10 +501,12 @@ class PaymentModel(QObject):
     
     def _on_print_success(self):
         """Handles successful print completion."""
+        print("=" * 50)
         print("DEBUG: _on_print_success called - Print job completed successfully")
         print("DEBUG: Current thread:", threading.current_thread().name)
         print("DEBUG: Payment model state - payment_ready:", getattr(self, 'payment_ready', 'N/A'))
         print("DEBUG: Payment model state - payment_processing:", getattr(self, 'payment_processing', 'N/A'))
+        print("=" * 50)
         
         # Cancel timeout timer since we got the success signal
         if hasattr(self, 'print_timeout_timer'):
@@ -529,7 +531,10 @@ class PaymentModel(QObject):
     
     def _on_print_timeout(self):
         """Handles print timeout - ensures navigation happens even if signals fail."""
+        print("=" * 50)
         print("DEBUG: _on_print_timeout called - Print job timed out, forcing navigation")
+        print("DEBUG: Current thread:", threading.current_thread().name)
+        print("=" * 50)
         self.payment_status_updated.emit("Print completed (timeout reached)")
         self._navigate_to_thank_you()
     

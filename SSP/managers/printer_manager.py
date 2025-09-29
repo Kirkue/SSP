@@ -265,8 +265,17 @@ class PrinterThread(QThread):
         print("DEBUG: Ink analysis completed, emitting print_success signal...")
         print("DEBUG: Current thread for signal emission:", threading.current_thread().name)
         print("DEBUG: Signal connections:", self.print_success.receivers())
-        self.print_success.emit()
-        print("DEBUG: print_success signal emitted from ink analysis callback")
+        
+        try:
+            self.print_success.emit()
+            print("DEBUG: print_success signal emitted from ink analysis callback")
+            print("DEBUG: Signal emission completed successfully")
+        except Exception as e:
+            print(f"DEBUG: ERROR emitting print_success signal: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print("DEBUG: Ink analysis callback method completed")
 
     def cleanup_temp_pdf(self):
         """Deletes the temporary PDF file if it was created."""
