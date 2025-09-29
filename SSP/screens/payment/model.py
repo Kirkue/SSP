@@ -424,6 +424,33 @@ class PaymentModel(QObject):
         print("DEBUG: Starting printing process...")
         self.payment_status_updated.emit("Change dispensed. Starting to print...")
         
+        # Ensure print attributes exist (defensive programming)
+        if not hasattr(self, 'print_file_path'):
+            print("ERROR: print_file_path attribute not found, initializing...")
+            self.print_file_path = None
+        if not hasattr(self, 'selected_pages'):
+            print("ERROR: selected_pages attribute not found, initializing...")
+            self.selected_pages = None
+        if not hasattr(self, 'copies'):
+            print("ERROR: copies attribute not found, initializing...")
+            self.copies = 1
+        if not hasattr(self, 'color_mode'):
+            print("ERROR: color_mode attribute not found, initializing...")
+            self.color_mode = "Color"
+        
+        # Try to get print attributes from payment_data if they're not set
+        if not self.print_file_path and hasattr(self, 'payment_data') and self.payment_data:
+            print("DEBUG: Attempting to extract print attributes from payment_data...")
+            if 'pdf_data' in self.payment_data and 'path' in self.payment_data['pdf_data']:
+                self.print_file_path = self.payment_data['pdf_data']['path']
+            if 'selected_pages' in self.payment_data:
+                self.selected_pages = self.payment_data['selected_pages']
+            if 'copies' in self.payment_data:
+                self.copies = self.payment_data['copies']
+            if 'color_mode' in self.payment_data:
+                self.color_mode = self.payment_data['color_mode']
+            print(f"DEBUG: Extracted from payment_data - file: {self.print_file_path}, pages: {self.selected_pages}, copies: {self.copies}, mode: {self.color_mode}")
+        
         # Check if all required print attributes are available
         if not self.print_file_path:
             print("ERROR: No print file path available")
