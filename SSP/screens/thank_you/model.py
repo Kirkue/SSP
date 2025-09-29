@@ -32,6 +32,12 @@ class ThankYouModel(QObject):
         
     def on_enter(self, main_app):
         """Called when the screen is shown."""
+        print("=" * 60)
+        print("Thank you screen: on_enter() called")
+        print("Thank you screen: main_app type:", type(main_app).__name__)
+        print("Thank you screen: print_job_started flag:", self.print_job_started)
+        print("=" * 60)
+        
         self.main_app = main_app
         
         # Check if print job has already been started to prevent duplicates
@@ -49,6 +55,11 @@ class ThankYouModel(QObject):
         # Start the print job and monitor both signals and printer status
         if hasattr(main_app, 'printer_manager'):
             print("Thank you screen: Starting print job...")
+            print("Thank you screen: Checking for current_print_job...")
+            if hasattr(main_app, 'current_print_job'):
+                print("Thank you screen: current_print_job found:", main_app.current_print_job)
+            else:
+                print("Thank you screen: ERROR - No current_print_job found!")
             
             # Connect to printer signals as primary method
             print("Thank you screen: Connecting to printer signals...")
