@@ -417,6 +417,17 @@ class PaymentModel(QObject):
             print("DEBUG: Coin inventory successfully updated")
             self.payment_status_updated.emit("Inventory updated successfully!")
         
+        # Store print job details in main app for thank you screen to access
+        if hasattr(self, 'main_app') and hasattr(self, 'print_file_path'):
+            print("DEBUG: Storing print job details in main app...")
+            self.main_app.current_print_job = {
+                'file_path': self.print_file_path,
+                'selected_pages': self.selected_pages,
+                'copies': self.copies,
+                'color_mode': self.color_mode
+            }
+            print(f"DEBUG: Print job details stored: {self.main_app.current_print_job}")
+        
         # Navigate directly to thank you screen after change dispensing
         print("DEBUG: Change dispensing complete, navigating to thank you screen...")
         self._navigate_to_thank_you()
@@ -468,21 +479,8 @@ class PaymentModel(QObject):
         
         print(f"DEBUG: Print job details - file: {self.print_file_path}, pages: {self.selected_pages}, copies: {self.copies}, mode: {self.color_mode}")
         
-        # Start the print job
-        if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
-            print("DEBUG: Starting print job...")
-            
-            # Print signal connections removed - not waiting for print completion
-            
-            self.main_app.printer_manager.print_file(
-                file_path=self.print_file_path,
-                selected_pages=self.selected_pages,
-                copies=self.copies,
-                color_mode=self.color_mode
-            )
-        else:
-            print("DEBUG: No printer manager available")
-            self._navigate_to_thank_you()
+        # Print job will be started by the thank you screen
+        print("DEBUG: Print job will be started by thank you screen")
     
     def _on_print_success(self):
         """Handles successful print completion."""

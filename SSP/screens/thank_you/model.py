@@ -23,18 +23,31 @@ class ThankYouModel(QObject):
         
     def on_enter(self, main_app):
         """Called when the screen is shown."""
-        self.current_state = "printing"
+        self.main_app = main_app
+        self.current_state = "waiting"
         self.status_updated.emit(
-            "SENDING TO PRINTER...",
-            "Please wait while we process your print job."
+            "PRINTING IN PROGRESS...",
+            "Please wait while your document is being printed."
         )
         self.redirect_timer.stop()
         
-        # Check if there's already a print job running
-        if hasattr(main_app, 'printer_manager') and main_app.printer_manager.print_thread:
-            print("Thank you screen: Print job already in progress")
+        # Connect to printer manager signals to monitor print completion
+        if hasattr(main_app, 'printer_manager'):
+            print("Thank you screen: Connecting to printer manager signals...")
+            main_app.printer_manager.print_job_successful.connect(self._on_print_success)
+            main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
+            print("Thank you screen: Printer signals connected")
+            
+            # Start the print job
+            self._start_print_job(main_app)
+            
+            # Start a safety timeout in case signals don't work (2 minutes)
+            self.redirect_timer.start(120000)  # 2 minute safety timeout
+            print("Thank you screen: Safety timeout started (2 minutes)")
         else:
-            print("Thank you screen: No print job detected, this might be an error")
+            print("Thank you screen: No printer manager found, this might be an error")
+            # Fallback: start timer if no printer manager
+            self.redirect_timer.start(10000)  # 10 second fallback
     
     def finish_printing(self):
         """Updates the state to finished and starts the timer to go idle."""
@@ -78,8 +91,62 @@ class ThankYouModel(QObject):
         # Start a longer timer to allow the user to read the error
         self.redirect_timer.start(15000)
     
+    def _on_print_success(self):
+        """Handles successful print completion."""
+        print("Thank you screen: Print job completed successfully")
+        
+        # Stop the safety timeout since we got the success signal
+        if self.redirect_timer.isActive():
+            self.redirect_timer.stop()
+            print("Thank you screen: Safety timeout cancelled")
+        
+        self.current_state = "completed"
+        self.status_updated.emit(
+            "PRINTING COMPLETED",
+            "Kindly collect your documents. We hope to see you again!"
+        )
+        
+        # Start the 5-second timer to go back to the idle screen
+        print("Thank you screen: Starting 5-second redirect timer...")
+        self.redirect_timer.start(5000)
+    
+    def _start_print_job(self, main_app):
+        """Start the print job using stored print job details."""
+        if hasattr(main_app, 'current_print_job') and main_app.current_print_job:
+            print("Thank you screen: Starting print job with stored details...")
+            print(f"Thank you screen: Print job details: {main_app.current_print_job}")
+            
+            try:
+                main_app.printer_manager.print_file(
+                    file_path=main_app.current_print_job['file_path'],
+                    selected_pages=main_app.current_print_job['selected_pages'],
+                    copies=main_app.current_print_job['copies'],
+                    color_mode=main_app.current_print_job['color_mode']
+                )
+                print("Thank you screen: Print job started successfully")
+            except Exception as e:
+                print(f"Thank you screen: Error starting print job: {e}")
+                self.show_printing_error(f"Failed to start print job: {e}")
+        else:
+            print("Thank you screen: No print job details found")
+            self.show_printing_error("No print job details available")
+    
+    def _on_print_failed(self, error_message):
+        """Handles print job failure."""
+        print(f"Thank you screen: Print job failed: {error_message}")
+        self.show_printing_error(error_message)
+    
     def on_leave(self):
         """Called when the screen is hidden."""
+        # Disconnect printer signals to prevent memory leaks
+        if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
+            try:
+                self.main_app.printer_manager.print_job_successful.disconnect(self._on_print_success)
+                self.main_app.printer_manager.print_job_failed.disconnect(self._on_print_failed)
+                print("Thank you screen: Printer signals disconnected")
+            except:
+                pass  # Ignore errors if signals weren't connected
+        
         # Stop the timer if the user navigates away manually
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
