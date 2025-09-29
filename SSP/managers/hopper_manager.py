@@ -119,11 +119,16 @@ class HopperController:
             return False
 
     def _dispense_single_coin_attempt(self):
+        """Single attempt to dispense exactly one coin."""
+        # Enable hopper motor
         self._enable_hopper()
-        # Give the motor time to spin and start dispensing
-        time.sleep(0.5)  # Wait 500ms for motor to spin up
+
+        # Wait for exactly one coin passage
         success = self._wait_for_coin_passage()
+
+        # Stop motor immediately after detection (success or failure)
         self._disable_hopper()
+
         return success
 
     def dispense_single_coin(self):
