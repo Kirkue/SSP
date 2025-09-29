@@ -46,18 +46,24 @@ class ThankYouModel(QObject):
         )
         self.redirect_timer.stop()
         
-        # Start the print job and monitor printer status
+        # Start the print job and monitor both signals and printer status
         if hasattr(main_app, 'printer_manager'):
             print("Thank you screen: Starting print job...")
+            
+            # Connect to printer signals as primary method
+            print("Thank you screen: Connecting to printer signals...")
+            main_app.printer_manager.print_job_successful.connect(self._on_print_success)
+            main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
+            print("Thank you screen: Printer signals connected")
             
             # Start the print job
             self._start_print_job(main_app)
             
-            # Start periodic printer status check (every 5 seconds)
+            # Start periodic printer status check as fallback (every 5 seconds)
             self.status_check_timer.start(5000)  # Check every 5 seconds
-            print("Thank you screen: Printer status check started (every 5 seconds)")
+            print("Thank you screen: Printer status check started as fallback (every 5 seconds)")
             
-            # Start a safety timeout in case printer check fails (2 minutes)
+            # Start a safety timeout in case both methods fail (2 minutes)
             self.redirect_timer.start(120000)  # 2 minute safety timeout
             print("Thank you screen: Safety timeout started (2 minutes)")
         else:
@@ -152,8 +158,12 @@ class ThankYouModel(QObject):
             self.show_printing_error("No print job details available")
     
     def _check_print_status(self):
-        """Check if printer is idle, if so navigate to idle screen."""
-        print("Thank you screen: Checking printer status...")
+        """Check if printer is idle as fallback if signal not received."""
+        # Only check if we're still waiting (signal not received)
+        if self.current_state != "waiting":
+            return
+            
+        print("Thank you screen: Fallback - Checking printer status...")
         
         try:
             # Check if printer is idle using lpstat command
@@ -163,20 +173,19 @@ class ThankYouModel(QObject):
                 # Parse the output to see if printer is idle
                 output = result.stdout.lower()
                 if 'idle' in output or 'ready' in output:
-                    print("Thank you screen: Printer is idle, print job completed")
-                    if self.current_state == "waiting":
-                        print("Thank you screen: Print completed, navigating to idle screen")
-                        self._on_print_success()
+                    print("Thank you screen: Fallback - Printer is idle, print job completed")
+                    print("Thank you screen: Signal not received, using fallback method")
+                    self._on_print_success()
                 else:
-                    print("Thank you screen: Printer is still busy")
+                    print("Thank you screen: Fallback - Printer is still busy")
             else:
-                print(f"Thank you screen: lpstat failed with return code {result.returncode}")
+                print(f"Thank you screen: Fallback - lpstat failed with return code {result.returncode}")
                 print(f"Thank you screen: Error output: {result.stderr}")
                 
         except subprocess.TimeoutExpired:
-            print("Thank you screen: lpstat command timed out")
+            print("Thank you screen: Fallback - lpstat command timed out")
         except Exception as e:
-            print(f"Thank you screen: Error checking printer status: {e}")
+            print(f"Thank you screen: Fallback - Error checking printer status: {e}")
     
     def _on_print_failed(self, error_message):
         """Handles print job failure."""
@@ -185,6 +194,15 @@ class ThankYouModel(QObject):
     
     def on_leave(self):
         """Called when the screen is hidden."""
+        # Disconnect printer signals to prevent memory leaks
+        if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
+            try:
+                self.main_app.printer_manager.print_job_successful.disconnect(self._on_print_success)
+                self.main_app.printer_manager.print_job_failed.disconnect(self._on_print_failed)
+                print("Thank you screen: Printer signals disconnected")
+            except:
+                pass  # Ignore errors if signals weren't connected
+        
         # Stop the timers if the user navigates away manually
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
