@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from managers.hopper_manager import ChangeDispenser, DispenseThread, PIGPIO_AVAILABLE as HOPPER_GPIO_AVAILABLE
 from database.db_manager import DatabaseManager
@@ -498,10 +499,15 @@ class PaymentModel(QObject):
     def _on_print_success(self):
         """Handles successful print completion."""
         print("DEBUG: _on_print_success called - Print job completed successfully")
+        print("DEBUG: Current thread:", threading.current_thread().name)
+        print("DEBUG: Payment model state - payment_ready:", getattr(self, 'payment_ready', 'N/A'))
+        print("DEBUG: Payment model state - payment_processing:", getattr(self, 'payment_processing', 'N/A'))
+        
         # Cancel timeout timer since we got the success signal
         if hasattr(self, 'print_timeout_timer'):
             self.print_timeout_timer.stop()
             print("DEBUG: Print timeout timer cancelled")
+        
         self.payment_status_updated.emit("Print completed successfully!")
         print("DEBUG: About to navigate to thank you screen...")
         self._navigate_to_thank_you()
@@ -526,6 +532,10 @@ class PaymentModel(QObject):
     
     def _navigate_to_thank_you(self):
         """Navigate to thank you screen after all operations are complete."""
+        print("DEBUG: _navigate_to_thank_you called")
+        print("DEBUG: Current thread:", threading.current_thread().name)
+        print("DEBUG: main_app available:", hasattr(self, 'main_app') and self.main_app is not None)
+        
         # Emit payment completed signal now that everything is done
         if hasattr(self, 'payment_info'):
             print("DEBUG: Emitting payment_completed signal with stored payment info")
@@ -535,7 +545,11 @@ class PaymentModel(QObject):
         
         if hasattr(self, 'main_app') and self.main_app:
             print("DEBUG: Navigating to thank you screen")
-            self.main_app.show_screen('thank_you')
+            try:
+                self.main_app.show_screen('thank_you')
+                print("DEBUG: Navigation to thank you screen completed")
+            except Exception as e:
+                print(f"DEBUG: Error navigating to thank you screen: {e}")
         else:
             print("DEBUG: No main_app available for navigation")
     
