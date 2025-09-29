@@ -417,8 +417,9 @@ class PaymentModel(QObject):
             print("DEBUG: Coin inventory successfully updated")
             self.payment_status_updated.emit("Inventory updated successfully!")
         
-        # Now start printing
-        self._start_printing()
+        # Navigate directly to thank you screen after change dispensing
+        print("DEBUG: Change dispensing complete, navigating to thank you screen...")
+        self._navigate_to_thank_you()
     
     def _start_printing(self):
         """Start the printing process after change has been dispensed."""
@@ -471,37 +472,7 @@ class PaymentModel(QObject):
         if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
             print("DEBUG: Starting print job...")
             
-            # Connect printer signals if not already connected
-            if not hasattr(self, '_printer_signals_connected'):
-                print("DEBUG: Connecting printer signals...")
-                print("DEBUG: Connecting print_job_successful to _on_print_success")
-                self.main_app.printer_manager.print_job_successful.connect(self._on_print_success)
-                print("DEBUG: Connecting print_job_failed to _on_print_failed")
-                self.main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
-                self._printer_signals_connected = True
-                print("DEBUG: Printer signals connected successfully")
-            else:
-                print("DEBUG: Printer signals already connected")
-            
-            # Add a safety timeout to ensure navigation happens even if signals fail
-            from PyQt5.QtCore import QTimer
-            self.print_timeout_timer = QTimer()
-            self.print_timeout_timer.timeout.connect(self._on_print_timeout)
-            self.print_timeout_timer.setSingleShot(True)
-            self.print_timeout_timer.start(300000)  # 5 minutes timeout
-            print("DEBUG: Print timeout timer started (5 minutes)")
-            
-            # Test signal connection by emitting a test signal
-            print("DEBUG: Testing signal connection...")
-            try:
-                # This should trigger _on_print_success if connection is working
-                print("DEBUG: About to emit test print_job_successful signal...")
-                self.main_app.printer_manager.print_job_successful.emit()
-                print("DEBUG: Test signal emitted successfully")
-            except Exception as e:
-                print(f"DEBUG: ERROR emitting test signal: {e}")
-                import traceback
-                traceback.print_exc()
+            # Print signal connections removed - not waiting for print completion
             
             self.main_app.printer_manager.print_file(
                 file_path=self.print_file_path,
