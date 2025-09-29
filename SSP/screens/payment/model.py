@@ -303,8 +303,8 @@ class PaymentModel(QObject):
                 type='bill' if denomination >= 20 else 'coin'
             )
         
-        # Prepare payment info
-        payment_info = {
+        # Store payment info for later emission (after hopper dispensing and printing)
+        self.payment_info = {
             'pdf_data': self.payment_data['pdf_data'],
             'selected_pages': self.payment_data['selected_pages'],
             'color_mode': self.payment_data['color_mode'],
@@ -315,12 +315,13 @@ class PaymentModel(QObject):
             'payment_method': 'Cash' if PAYMENT_GPIO_AVAILABLE else 'Simulation'
         }
         
-        self.payment_completed.emit(payment_info)
+        print("DEBUG: Payment info stored, will emit after hopper dispensing and printing complete")
         
         # NEW FLOW: Handle change dispensing FIRST, then print
         if change_amount > 0:
             print(f"DEBUG: Starting change dispensing for ₱{change_amount:.2f}")
-            self.payment_status_updated.emit(f"Dispensing change: ₱{change_amount:.2f}")
+            self.payment_status_updated.emit(f"Please wait... Dispensing change: ₱{change_amount:.2f}")
+            print("DEBUG: Payment screen will stay active during hopper dispensing")
             # Get admin screen from main_app to pass to dispense thread
             admin_screen = None
             if hasattr(self, 'main_app') and hasattr(self.main_app, 'admin_screen'):
@@ -365,6 +366,7 @@ class PaymentModel(QObject):
             expected_change = result.get('expected_change', 0)
             
             print(f"DEBUG: Change dispensing completed - ₱1={coins_1}, ₱5={coins_5}, actual={actual_change}, expected={expected_change}")
+            self.payment_status_updated.emit(f"Change dispensed! Updating inventory...")
             
             # Update database with actual coins dispensed
             if hasattr(self, 'main_app') and hasattr(self.main_app, 'database_thread_manager'):
@@ -391,8 +393,10 @@ class PaymentModel(QObject):
         print(f"DEBUG: Coin inventory updated: {operation.result}")
         if operation.error:
             print(f"ERROR: Failed to update coin inventory: {operation.error}")
+            self.payment_status_updated.emit("Inventory update failed, but continuing...")
         else:
             print("DEBUG: Coin inventory successfully updated")
+            self.payment_status_updated.emit("Inventory updated successfully!")
         
         # Now start printing
         self._start_printing()
@@ -437,7 +441,14 @@ class PaymentModel(QObject):
         self._navigate_to_thank_you()
     
     def _navigate_to_thank_you(self):
-        """Navigate to thank you screen."""
+        """Navigate to thank you screen after all operations are complete."""
+        # Emit payment completed signal now that everything is done
+        if hasattr(self, 'payment_info'):
+            print("DEBUG: Emitting payment_completed signal with stored payment info")
+            self.payment_completed.emit(self.payment_info)
+        else:
+            print("DEBUG: No payment info available to emit")
+        
         if hasattr(self, 'main_app') and self.main_app:
             print("DEBUG: Navigating to thank you screen")
             self.main_app.show_screen('thank_you')
