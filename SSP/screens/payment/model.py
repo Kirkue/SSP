@@ -487,8 +487,20 @@ class PaymentModel(QObject):
         
         print(f"DEBUG: Print job details - file: {self.print_file_path}, pages: {self.selected_pages}, copies: {self.copies}, mode: {self.color_mode}")
         
-        # Print job will be started by the thank you screen
-        print("DEBUG: Print job will be started by thank you screen")
+        # Store print job details in main app for thank you screen to access
+        if hasattr(self, 'main_app'):
+            print("DEBUG: Storing print job details in main app...")
+            self.main_app.current_print_job = {
+                'file_path': self.print_file_path,
+                'selected_pages': self.selected_pages,
+                'copies': self.copies,
+                'color_mode': self.color_mode
+            }
+            print(f"DEBUG: Print job details stored: {self.main_app.current_print_job}")
+        
+        # Navigate to thank you screen
+        print("DEBUG: Navigating to thank you screen...")
+        self._navigate_to_thank_you()
     
     def _on_print_success(self):
         """Handles successful print completion."""
