@@ -225,6 +225,7 @@ class PrinterThread(QThread):
                 selected_pages=self.selected_pages,
                 copies=self.copies,
                 dpi=150,
+                color_mode=self.color_mode,  # Pass color mode to ink analysis
                 callback=self._on_ink_analysis_completed
             )
             

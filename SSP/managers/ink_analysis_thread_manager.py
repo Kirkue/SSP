@@ -89,16 +89,18 @@ class InkAnalysisThreadManager(QObject):
             selected_pages = operation.data.get('selected_pages')
             copies = operation.data.get('copies', 1)
             dpi = operation.data.get('dpi', 150)
+            color_mode = operation.data.get('color_mode', 'Color')
             
             print(f"DEBUG: Ink analysis thread - Analyzing {pdf_path}")
-            print(f"DEBUG: Ink analysis thread - Pages: {selected_pages}, Copies: {copies}")
+            print(f"DEBUG: Ink analysis thread - Pages: {selected_pages}, Copies: {copies}, Color Mode: {color_mode}")
             
             # Perform the analysis and update
             result = self.ink_analysis_manager.analyze_and_update_after_print(
                 pdf_path=pdf_path,
                 selected_pages=selected_pages,
                 copies=copies,
-                dpi=dpi
+                dpi=dpi,
+                color_mode=color_mode
             )
             
             operation.result = result
@@ -107,6 +109,14 @@ class InkAnalysisThreadManager(QObject):
             if result.get('database_updated', False):
                 self.database_updated.emit(True)
                 print("DEBUG: Ink analysis thread - Database updated successfully")
+                # Get updated CMYK levels and emit them
+                updated_levels = self.db_manager.get_cmyk_ink_levels()
+                if updated_levels:
+                    self.analysis_completed.emit({
+                        'success': True,
+                        'database_updated': True,
+                        'cmyk_levels': updated_levels
+                    })
             else:
                 self.database_updated.emit(False)
                 print("DEBUG: Ink analysis thread - Database update failed")
@@ -116,13 +126,14 @@ class InkAnalysisThreadManager(QObject):
             print(f"Error in ink analysis: {e}")
             self.database_updated.emit(False)
     
-    def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, callback=None):
+    def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color", callback=None):
         """Queue an analyze and update operation."""
         operation = InkAnalysisOperation("analyze_and_update", {
             'pdf_path': pdf_path,
             'selected_pages': selected_pages,
             'copies': copies,
-            'dpi': dpi
+            'dpi': dpi,
+            'color_mode': color_mode
         }, callback)
         self.operation_queue.put(operation)
         return operation

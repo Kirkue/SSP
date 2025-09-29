@@ -210,13 +210,14 @@ class InkAnalysisManager:
             'timestamp': datetime.now()
         }
     
-    def update_database_after_print(self, analysis_result, copies=1):
+    def update_database_after_print(self, analysis_result, copies=1, color_mode="Color"):
         """
         Update the CMYK ink levels in the database after printing.
         
         Args:
             analysis_result (dict): Result from analyze_pdf_ink_usage
             copies (int): Number of copies printed
+            color_mode (str): Print mode - "Color" or "Monochrome"
         """
         print(f"DEBUG: update_database_after_print called with copies={copies}")
         print(f"DEBUG: analysis_result={analysis_result}")
@@ -249,11 +250,23 @@ class InkAnalysisManager:
             print(f"DEBUG: Job costs: {job_costs}")
             print(f"DEBUG: Copies factor: {copies_factor}")
             
-            # Calculate new levels (subtract usage from current levels)
-            new_cyan = max(0, current_levels['cyan'] - (job_costs['color_cartridge_percent'] * copies_factor))
-            new_magenta = max(0, current_levels['magenta'] - (job_costs['color_cartridge_percent'] * copies_factor))
-            new_yellow = max(0, current_levels['yellow'] - (job_costs['color_cartridge_percent'] * copies_factor))
-            new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
+            # Calculate new levels based on color mode
+            print(f"DEBUG: Color mode: {color_mode}")
+            
+            if color_mode.lower() == "monochrome" or color_mode.lower() == "black and white":
+                # For monochrome printing, only deduct from black (K)
+                print("DEBUG: Monochrome printing - only deducting from black ink")
+                new_cyan = current_levels['cyan']  # No change
+                new_magenta = current_levels['magenta']  # No change
+                new_yellow = current_levels['yellow']  # No change
+                new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
+            else:
+                # For color printing, deduct from all colors
+                print("DEBUG: Color printing - deducting from all CMYK colors")
+                new_cyan = max(0, current_levels['cyan'] - (job_costs['color_cartridge_percent'] * copies_factor))
+                new_magenta = max(0, current_levels['magenta'] - (job_costs['color_cartridge_percent'] * copies_factor))
+                new_yellow = max(0, current_levels['yellow'] - (job_costs['color_cartridge_percent'] * copies_factor))
+                new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
             
             print(f"DEBUG: New levels calculated:")
             print(f"  Cyan: {current_levels['cyan']:.1f}% -> {new_cyan:.1f}%")
@@ -284,7 +297,7 @@ class InkAnalysisManager:
             traceback.print_exc()
             return False
     
-    def analyze_and_update_after_print(self, pdf_path, selected_pages=None, copies=1, dpi=150):
+    def analyze_and_update_after_print(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color"):
         """
         Complete workflow: analyze PDF ink usage and update database.
         
@@ -293,6 +306,7 @@ class InkAnalysisManager:
             selected_pages (list): List of page numbers to analyze
             copies (int): Number of copies printed
             dpi (int): DPI for rendering PDF pages
+            color_mode (str): Print mode - "Color" or "Monochrome"
             
         Returns:
             dict: Analysis result with success status
@@ -306,7 +320,7 @@ class InkAnalysisManager:
             return analysis_result
         
         # Update database
-        update_success = self.update_database_after_print(analysis_result, copies)
+        update_success = self.update_database_after_print(analysis_result, copies, color_mode)
         
         analysis_result['database_updated'] = update_success
         
