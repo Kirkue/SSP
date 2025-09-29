@@ -87,7 +87,9 @@ class PrinterThread(QThread):
                 time.sleep(30)
             
             # Step 5: Analyze ink usage and update database
+            print("DEBUG: About to start ink analysis...")
             self._analyze_and_update_ink_usage()
+            print("DEBUG: Ink analysis completed")
             
             self.print_success.emit()
 
