@@ -12,14 +12,14 @@ def init_db():
     # Create database directory if it doesn't exist
     os.makedirs(db_dir, exist_ok=True)
     
-    print(f"📁 Database directory: {db_dir}")
-    print(f"📄 Database path: {db_path}")
+    print(f"Database directory: {db_dir}")
+    print(f"Database path: {db_path}")
     
     # Connect to database (creates it if it doesn't exist)
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    print("🔨 Creating database tables...")
+    print("Creating database tables...")
 
     # Create Transactions table
     cursor.execute('''
@@ -37,7 +37,7 @@ def init_db():
         error_message TEXT
     )
     ''')
-    print("✅ Created transactions table")
+    print("OK - Created transactions table")
 
     # Create CashInventory table
     cursor.execute('''
@@ -48,7 +48,7 @@ def init_db():
         last_updated DATETIME NOT NULL
     )
     ''')
-    print("✅ Created cash_inventory table")
+    print("OK - Created cash_inventory table")
 
     # Create ErrorLog table
     cursor.execute('''
@@ -61,7 +61,7 @@ def init_db():
         resolved BOOLEAN DEFAULT FALSE
     )
     ''')
-    print("✅ Created error_log table")
+    print("OK - Created error_log table")
 
     # Create PrinterStatus table
     cursor.execute('''
@@ -73,8 +73,22 @@ def init_db():
         status TEXT NOT NULL
     )
     ''')
-    print("✅ Created printer_status table")
+    print("OK - Created printer_status table")
+
+    # Create CMYK Ink Levels table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS cmyk_ink_levels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp DATETIME NOT NULL,
+        cyan_level REAL NOT NULL,
+        magenta_level REAL NOT NULL,
+        yellow_level REAL NOT NULL,
+        black_level REAL NOT NULL,
+        last_updated DATETIME NOT NULL
+    )
+    ''')
+    print("OK - Created cmyk_ink_levels table")
 
     conn.commit()
     conn.close()
-    print("✅ Database initialization complete")
+    print("OK - Database initialization complete")

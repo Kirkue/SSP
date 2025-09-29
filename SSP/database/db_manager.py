@@ -81,6 +81,18 @@ class DatabaseManager:
                     value TEXT NOT NULL
                 )
             """)
+            # --- NEW: CMYK Ink Levels Table ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS cmyk_ink_levels (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME NOT NULL,
+                    cyan_level REAL NOT NULL,
+                    magenta_level REAL NOT NULL,
+                    yellow_level REAL NOT NULL,
+                    black_level REAL NOT NULL,
+                    last_updated DATETIME NOT NULL
+                )
+            """)
             self.conn.commit()
         except sqlite3.Error as e:
             print(f"Error creating tables: {e}")
@@ -249,3 +261,123 @@ class DatabaseManager:
     def update_paper_count(self, count):
         """Update the paper count in settings."""
         self.update_setting('paper_count', count)
+
+    # --- NEW: CMYK Ink Level Methods ---
+    def get_cmyk_ink_levels(self):
+        """Get the current CMYK ink levels."""
+        if not self.conn:
+            return None
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT cyan_level, magenta_level, yellow_level, black_level, last_updated
+                FROM cmyk_ink_levels 
+                ORDER BY last_updated DESC 
+                LIMIT 1
+            """)
+            result = cursor.fetchone()
+            if result:
+                return {
+                    'cyan': result['cyan_level'],
+                    'magenta': result['magenta_level'],
+                    'yellow': result['yellow_level'],
+                    'black': result['black_level'],
+                    'last_updated': result['last_updated']
+                }
+            return None
+        except sqlite3.Error as e:
+            print(f"Error getting CMYK ink levels: {e}")
+            return None
+
+    def update_cmyk_ink_levels(self, cyan, magenta, yellow, black):
+        """Update CMYK ink levels with decimal precision."""
+        if not self.conn:
+            return False
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO cmyk_ink_levels (cyan_level, magenta_level, yellow_level, black_level, timestamp, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (cyan, magenta, yellow, black, datetime.now(), datetime.now()))
+            self.conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error updating CMYK ink levels: {e}")
+            return False
+
+    def get_cmyk_ink_history(self, limit=10):
+        """Get CMYK ink level history."""
+        if not self.conn:
+            return []
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT cyan_level, magenta_level, yellow_level, black_level, last_updated
+                FROM cmyk_ink_levels 
+                ORDER BY last_updated DESC 
+                LIMIT ?
+            """, (limit,))
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            print(f"Error getting CMYK ink history: {e}")
+            return []
+
+    def get_supplies_status_with_cmyk(self):
+        """Get current supplies status including CMYK ink levels."""
+        if not self.conn:
+            return None
+            
+        try:
+            cursor = self.conn.cursor()
+            
+            # Get paper count from settings
+            cursor.execute("SELECT value FROM settings WHERE key = 'paper_count'")
+            paper_result = cursor.fetchone()
+            paper_count = int(paper_result['value']) if paper_result else 0
+            
+            # Get coin inventory
+            cursor.execute("""
+                SELECT denomination, count 
+                FROM cash_inventory 
+                WHERE type = 'coin' AND denomination IN (1, 5)
+            """)
+            coins = {row['denomination']: row['count'] for row in cursor.fetchall()}
+            
+            # Get CMYK ink levels
+            cmyk_levels = self.get_cmyk_ink_levels()
+            
+            # Build status dictionary
+            status = {
+                "paper_count": paper_count,
+                "coins": {
+                    "peso_1": coins.get(1, 0),
+                    "peso_5": coins.get(5, 0)
+                },
+                "cmyk_levels": cmyk_levels,
+                "warnings": []
+            }
+            
+            # Add warnings based on thresholds
+            if paper_count < 20:
+                status["warnings"].append("Low paper level!")
+            if coins.get(1, 0) < 50:
+                status["warnings"].append("Low on ₱1 coins!")
+            if coins.get(5, 0) < 20:
+                status["warnings"].append("Low on ₱5 coins!")
+            
+            # Add CMYK ink warnings
+            if cmyk_levels:
+                if cmyk_levels['cyan'] < 10.0:
+                    status["warnings"].append("Low Cyan ink level!")
+                if cmyk_levels['magenta'] < 10.0:
+                    status["warnings"].append("Low Magenta ink level!")
+                if cmyk_levels['yellow'] < 10.0:
+                    status["warnings"].append("Low Yellow ink level!")
+                if cmyk_levels['black'] < 10.0:
+                    status["warnings"].append("Low Black ink level!")
+                
+            return status
+            
+        except sqlite3.Error as e:
+            print(f"Error getting supplies status with CMYK: {e}")
+            return None

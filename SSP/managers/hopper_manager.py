@@ -7,10 +7,10 @@ from PyQt5.QtCore import QThread, pyqtSignal
 try:
     import pigpio
     PIGPIO_AVAILABLE = True
-    print("✅ pigpio library found. Hopper control is ENABLED.")
+    print("OK - pigpio library found. Hopper control is ENABLED.")
 except ImportError:
     PIGPIO_AVAILABLE = False
-    print("⚠️ pigpio library not found. Hopper control will be SIMULATED.")
+    print("WARNING: pigpio library not found. Hopper control will be SIMULATED.")
 
 
 # --- General Configuration ---

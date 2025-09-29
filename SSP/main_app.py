@@ -39,8 +39,9 @@ class PrintingSystemApp(QMainWindow):
 
         # --- Initialize Printer Manager ---
         print("Initializing printer manager...")
-        self.printer_manager = PrinterManager()
-        print("Printer manager initialized.")
+        # We'll initialize it after admin screen is created to get db_manager
+        self.printer_manager = None
+        print("Printer manager will be initialized after admin screen.")
 
         print("Initializing screens...")
 
@@ -51,6 +52,12 @@ class PrintingSystemApp(QMainWindow):
         self.printing_options_screen = PrintOptionsController(self)
         self.payment_screen = PaymentController(self)
         self.admin_screen = AdminController(self)
+        
+        # --- Initialize Printer Manager with database manager ---
+        print("Initializing printer manager with database connection...")
+        self.printer_manager = PrinterManager(self.admin_screen.db_manager)
+        print("Printer manager initialized with database connection.")
+        
         self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
         self.thank_you_screen = ThankYouController(self) # Initialize the new screen
 
@@ -176,6 +183,12 @@ class PrintingSystemApp(QMainWindow):
         """Clean up resources when the application is closing."""
         print("Cleaning up application resources...")
         try:
+            # Clean up USB monitoring thread
+            if hasattr(self, 'usb_screen') and hasattr(self.usb_screen, 'model'):
+                print("Cleaning up USB monitoring thread...")
+                self.usb_screen.model.stop_usb_monitoring()
+                print("USB monitoring thread cleaned up")
+            
             cleanup_sms()
             print("SMS system cleaned up")
         except Exception as e:

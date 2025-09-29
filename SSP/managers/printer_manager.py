@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from config import get_config
+from managers.ink_analysis_manager import InkAnalysisManager
 
 try:
     import fitz  # PyMuPDF
@@ -19,7 +20,7 @@ class PrinterThread(QThread):
     print_failed = pyqtSignal(str)
     print_waiting = pyqtSignal()
 
-    def __init__(self, file_path, copies, color_mode, selected_pages, printer_name):
+    def __init__(self, file_path, copies, color_mode, selected_pages, printer_name, db_manager=None):
         super().__init__()
         self.file_path = file_path
         self.copies = copies
@@ -27,6 +28,8 @@ class PrinterThread(QThread):
         self.selected_pages = sorted(selected_pages)
         self.printer_name = printer_name
         self.temp_pdf_path = None
+        self.db_manager = db_manager
+        self.ink_analysis_manager = InkAnalysisManager(db_manager) if db_manager else None
 
     def run(self):
         """The main logic for the printing thread."""
@@ -82,6 +85,9 @@ class PrinterThread(QThread):
                 self.print_waiting.emit()
                 import time
                 time.sleep(30)
+            
+            # Step 5: Analyze ink usage and update database
+            self._analyze_and_update_ink_usage()
             
             self.print_success.emit()
 
@@ -181,6 +187,37 @@ class PrinterThread(QThread):
         
         return command
 
+    def _analyze_and_update_ink_usage(self):
+        """Analyze ink usage and update database after successful printing."""
+        if not self.ink_analysis_manager:
+            print("Warning: No ink analysis manager available, skipping ink analysis")
+            return
+        
+        try:
+            print("Starting ink usage analysis after printing...")
+            
+            # Use the original PDF file for analysis (not the temp file)
+            analysis_result = self.ink_analysis_manager.analyze_and_update_after_print(
+                pdf_path=self.file_path,
+                selected_pages=self.selected_pages,
+                copies=self.copies,
+                dpi=150  # Use standard DPI for analysis
+            )
+            
+            if analysis_result.get('success', False):
+                print("Ink analysis completed successfully")
+                if analysis_result.get('database_updated', False):
+                    print("Database updated with new ink levels")
+                else:
+                    print("Warning: Database update failed")
+            else:
+                print(f"Ink analysis failed: {analysis_result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            print(f"Error during ink analysis: {e}")
+            # Don't fail the print job if ink analysis fails
+            pass
+
     def cleanup_temp_pdf(self):
         """Deletes the temporary PDF file if it was created."""
         if self.temp_pdf_path and os.path.exists(self.temp_pdf_path):
@@ -198,11 +235,12 @@ class PrinterManager(QObject):
     print_job_failed = pyqtSignal(str)
     print_job_waiting = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, db_manager=None):
         super().__init__()
         config = get_config()
         self.printer_name = config.printer_name
         self.print_thread = None
+        self.db_manager = db_manager
         self.check_printer_availability()
 
     def print_file(self, file_path, copies, color_mode, selected_pages):
@@ -223,7 +261,8 @@ class PrinterManager(QObject):
             copies=copies,
             color_mode=color_mode,
             selected_pages=selected_pages,
-            printer_name=self.printer_name
+            printer_name=self.printer_name,
+            db_manager=self.db_manager
         )
         self.print_thread.print_success.connect(self.print_job_successful.emit)
         self.print_thread.print_failed.connect(self.print_job_failed.emit)

@@ -21,22 +21,38 @@ class USBMonitorThread(QThread):
         super().__init__()
         self.usb_manager = usb_manager
         self.monitoring = True
+        self._should_stop = False
 
     def run(self):
-        while self.monitoring:
+        print("🔄 USBMonitorThread started")
+        while self.monitoring and not self._should_stop:
             try:
                 new_drives, removed_drives = self.usb_manager.check_for_new_drives()
-                if new_drives:
+                if new_drives and self.monitoring:  # Check monitoring state before emitting
                     self.usb_detected.emit(new_drives[0])
-                if removed_drives:
+                if removed_drives and self.monitoring:  # Check monitoring state before emitting
                     self.usb_removed.emit(removed_drives[0])
-                self.msleep(2000)
+                
+                # Use shorter sleep intervals and check for stop more frequently
+                for _ in range(20):  # 20 * 100ms = 2 seconds total
+                    if not self.monitoring or self._should_stop:
+                        break
+                    self.msleep(100)
+                    
             except Exception as e:
                 print(f"Error in USBMonitorThread: {e}")
-                self.msleep(5000)
+                # Shorter error sleep too
+                for _ in range(50):  # 50 * 100ms = 5 seconds total
+                    if not self.monitoring or self._should_stop:
+                        break
+                    self.msleep(100)
+        
+        print("🛑 USBMonitorThread finished")
 
     def stop_monitoring(self):
+        print("🛑 USBMonitorThread stop requested")
         self.monitoring = False
+        self._should_stop = True
 
 class USBScreenModel(QObject):
     """Handles the data and business logic for the USB screen."""
@@ -57,6 +73,10 @@ class USBScreenModel(QObject):
             'warning': '#ffc107',     # Yellow
             'error': '#dc3545'        # Red
         }
+    
+    def __del__(self):
+        """Destructor to ensure thread cleanup when object is destroyed."""
+        self.stop_usb_monitoring()
     
     def _create_usb_manager(self):
         """Creates the USB manager instance."""
@@ -93,19 +113,39 @@ class USBScreenModel(QObject):
     
     def start_usb_monitoring(self):
         """Starts the background thread to watch for USB insertions."""
-        if not self.monitoring_thread or not self.monitoring_thread.isRunning():
-            self.status_changed.emit("Monitoring for USB devices...", 'monitoring')
-            self.monitoring_thread = USBMonitorThread(self.usb_manager)
-            self.monitoring_thread.usb_detected.connect(self.usb_detected.emit)
-            self.monitoring_thread.usb_removed.connect(self.usb_removed.emit)
-            self.monitoring_thread.start()
-            print("✅ USB monitoring started")
+        # Ensure any existing thread is properly stopped first
+        self.stop_usb_monitoring()
+        
+        self.status_changed.emit("Monitoring for USB devices...", 'monitoring')
+        self.monitoring_thread = USBMonitorThread(self.usb_manager)
+        self.monitoring_thread.usb_detected.connect(self.usb_detected.emit)
+        self.monitoring_thread.usb_removed.connect(self.usb_removed.emit)
+        self.monitoring_thread.start()
+        print("✅ USB monitoring started")
     
     def stop_usb_monitoring(self):
         """Stops the background USB monitoring thread."""
         if self.monitoring_thread and self.monitoring_thread.isRunning():
+            print("🛑 Stopping USB monitoring thread...")
+            
+            # Disconnect signals first to prevent signal emission after thread stops
+            try:
+                self.monitoring_thread.usb_detected.disconnect()
+                self.monitoring_thread.usb_removed.disconnect()
+            except TypeError:
+                # Signals might not be connected, ignore
+                pass
+            
+            # Stop the monitoring loop
             self.monitoring_thread.stop_monitoring()
-            self.monitoring_thread.wait(2000)
+            
+            # Wait for thread to finish gracefully
+            if not self.monitoring_thread.wait(3000):  # Increased wait time to 3 seconds
+                print("⚠️ Thread did not stop gracefully, terminating...")
+                self.monitoring_thread.terminate()
+                self.monitoring_thread.wait(1000)
+            
+            # Clean up thread reference
             self.monitoring_thread = None
             print("✅ USB monitoring stopped")
     

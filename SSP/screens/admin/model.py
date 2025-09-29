@@ -8,6 +8,7 @@ class AdminModel(QObject):
     """Handles the data and business logic for the admin screen."""
     paper_count_changed = pyqtSignal(int, str)  # Emits new count and display color
     coin_count_changed = pyqtSignal(int, int)   # Emits coin_1_count, coin_5_count
+    cmyk_levels_changed = pyqtSignal(float, float, float, float)  # Emits cyan, magenta, yellow, black
     show_message = pyqtSignal(str, str)         # Emits message title and text
 
     def __init__(self):
@@ -201,6 +202,60 @@ class AdminModel(QObject):
         except Exception as e:
             print(f"Error getting coin counts: {e}")
             return 0, 0
+
+    def load_cmyk_levels(self):
+        """Loads the CMYK ink levels from the database and emits a signal."""
+        try:
+            cmyk_data = self.db_manager.get_cmyk_ink_levels()
+            if cmyk_data:
+                self.cmyk_levels_changed.emit(
+                    cmyk_data['cyan'], 
+                    cmyk_data['magenta'], 
+                    cmyk_data['yellow'], 
+                    cmyk_data['black']
+                )
+                print(f"CMYK levels loaded: C:{cmyk_data['cyan']:.1f}% M:{cmyk_data['magenta']:.1f}% Y:{cmyk_data['yellow']:.1f}% K:{cmyk_data['black']:.1f}%")
+            else:
+                # No data available, set default values
+                self.cmyk_levels_changed.emit(100.0, 100.0, 100.0, 100.0)
+                print("No CMYK data found, using default values (100%)")
+        except Exception as e:
+            print(f"Error loading CMYK levels: {e}")
+            self.cmyk_levels_changed.emit(100.0, 100.0, 100.0, 100.0)
+
+    def update_cmyk_levels(self, cyan: float, magenta: float, yellow: float, black: float):
+        """Updates CMYK ink levels in the database."""
+        try:
+            # Validate ranges
+            if not (0.0 <= cyan <= 100.0 and 0.0 <= magenta <= 100.0 and 
+                    0.0 <= yellow <= 100.0 and 0.0 <= black <= 100.0):
+                self.show_message.emit("Invalid Input", "CMYK values must be between 0.0 and 100.0")
+                self.load_cmyk_levels()
+                return
+
+            success = self.db_manager.update_cmyk_ink_levels(cyan, magenta, yellow, black)
+            if success:
+                self.load_cmyk_levels()
+                print(f"CMYK levels updated: C:{cyan:.1f}% M:{magenta:.1f}% Y:{yellow:.1f}% K:{black:.1f}%")
+            else:
+                self.show_message.emit("Database Error", "Failed to update CMYK levels")
+                
+        except Exception as e:
+            print(f"Error updating CMYK levels: {e}")
+            self.show_message.emit("Error", f"Failed to update CMYK levels: {e}")
+
+    def reset_cmyk_levels(self):
+        """Resets all CMYK ink levels to 100%."""
+        try:
+            success = self.db_manager.update_cmyk_ink_levels(100.0, 100.0, 100.0, 100.0)
+            if success:
+                self.load_cmyk_levels()
+                print("CMYK levels reset to 100%")
+            else:
+                self.show_message.emit("Database Error", "Failed to reset CMYK levels")
+        except Exception as e:
+            print(f"Error resetting CMYK levels: {e}")
+            self.show_message.emit("Error", f"Failed to reset CMYK levels: {e}")
 
     def _get_color_for_count(self, count: int) -> str:
         """Determines the display color based on the paper count."""

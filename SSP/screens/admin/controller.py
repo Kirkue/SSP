@@ -37,10 +37,13 @@ class AdminController(QWidget):
         self.view.update_coin_1_clicked.connect(self.model.update_coin_1_count)
         self.view.update_coin_5_clicked.connect(self.model.update_coin_5_count)
         self.view.reset_coins_clicked.connect(self.model.reset_coin_counts)
+        self.view.update_cmyk_clicked.connect(self.model.update_cmyk_levels)
+        self.view.reset_cmyk_clicked.connect(self.model.reset_cmyk_levels)
         
         # --- Model -> View ---
         self.model.paper_count_changed.connect(self.view.update_paper_count_display)
         self.model.coin_count_changed.connect(self.view.update_coin_count_display)
+        self.model.cmyk_levels_changed.connect(self.view.update_cmyk_display)
         self.model.show_message.connect(self.view.show_message_box)
 
     # --- Public API for main_app and other screens ---
@@ -50,6 +53,7 @@ class AdminController(QWidget):
         print("Admin screen entered. Refreshing data.")
         self.model.load_paper_count()
         self.model.load_coin_counts()
+        self.model.load_cmyk_levels()
         # Debug: Show what paper count is loaded
         print(f"Admin on_enter: Paper count loaded as {self.model.paper_count}")
         print(f"Admin on_enter: Fresh DB value: {self.model.db_manager.get_setting('paper_count', default=100)}")

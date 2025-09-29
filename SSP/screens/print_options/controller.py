@@ -154,7 +154,7 @@ class PrintOptionsController(QWidget):
             # Get db_manager only when needed
             if hasattr(self.main_app, 'admin_screen') and hasattr(self.main_app.admin_screen, 'db_manager'):
                 db_manager = self.main_app.admin_screen.db_manager
-                status = db_manager.get_supplies_status()
+                status = db_manager.get_supplies_status_with_cmyk()
                 
                 if status:
                     self.view.update_supplies_status(status)
