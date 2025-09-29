@@ -1,5 +1,7 @@
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 import threading
+import subprocess
+import time
 
 class ThankYouModel(QObject):
     """Model for the Thank You screen - handles business logic and state management."""
@@ -17,6 +19,11 @@ class ThankYouModel(QObject):
         # Screen states
         self.current_state = "initial"
         self.print_job_started = False
+        
+        # Add a periodic check timer for debugging
+        self.status_check_timer = QTimer()
+        self.status_check_timer.timeout.connect(self._check_print_status)
+        self.status_check_timer.setSingleShot(False)
         
     def _on_timer_timeout(self):
         """Called when the redirect timer expires."""
@@ -48,20 +55,16 @@ class ThankYouModel(QObject):
             main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
             print("Thank you screen: Printer signals connected successfully")
             
-            # Test signal connection
-            print("Thank you screen: Testing signal connection...")
-            try:
-                main_app.printer_manager.print_job_successful.emit()
-                print("Thank you screen: Test signal emitted")
-            except Exception as e:
-                print(f"Thank you screen: Error emitting test signal: {e}")
-            
             # Start the print job
             self._start_print_job(main_app)
             
             # Start a safety timeout in case signals don't work (2 minutes)
             self.redirect_timer.start(120000)  # 2 minute safety timeout
             print("Thank you screen: Safety timeout started (2 minutes)")
+            
+            # Start periodic status check for debugging
+            self.status_check_timer.start(10000)  # Check every 10 seconds
+            print("Thank you screen: Status check timer started (every 10 seconds)")
         else:
             print("Thank you screen: ERROR - No printer manager found!")
             # Fallback: start timer if no printer manager
@@ -153,6 +156,29 @@ class ThankYouModel(QObject):
             print("Thank you screen: No print job details found")
             self.show_printing_error("No print job details available")
     
+    def _check_print_status(self):
+        """Periodic check to see if print job is complete (for debugging)."""
+        print("Thank you screen: Periodic status check...")
+        
+        # Check if we have a printer manager and print thread
+        if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
+            printer_manager = self.main_app.printer_manager
+            
+            # Check if print thread exists and is running
+            if hasattr(printer_manager, 'print_thread') and printer_manager.print_thread:
+                if printer_manager.print_thread.isRunning():
+                    print("Thank you screen: Print thread is still running")
+                else:
+                    print("Thank you screen: Print thread has finished")
+                    # If thread finished but we didn't get the signal, force completion
+                    if self.current_state == "waiting":
+                        print("Thank you screen: Thread finished but no signal received, forcing completion")
+                        self._on_print_success()
+            else:
+                print("Thank you screen: No print thread found")
+        else:
+            print("Thank you screen: No printer manager found in status check")
+    
     def _on_print_failed(self, error_message):
         """Handles print job failure."""
         print(f"Thank you screen: Print job failed: {error_message}")
@@ -169,9 +195,12 @@ class ThankYouModel(QObject):
             except:
                 pass  # Ignore errors if signals weren't connected
         
-        # Stop the timer if the user navigates away manually
+        # Stop the timers if the user navigates away manually
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
+        if self.status_check_timer.isActive():
+            self.status_check_timer.stop()
+            print("Thank you screen: Status check timer stopped")
         
         # Reset the print job started flag for next transaction
         self.print_job_started = False
