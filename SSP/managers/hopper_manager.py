@@ -14,10 +14,10 @@ except ImportError:
 
 
 # --- General Configuration ---
-COIN_DELAY = 1.0         # Delay after a successful dispense before next one (increased from 0.5)
-DISPENSING_TIMEOUT = 15  # Maximum time to wait for a single coin (increased from 10)
-MAX_RETRY_ATTEMPTS = 3   # Maximum attempts per coin before giving up
-RETRY_DELAY = 1.0        # Delay between retry attempts (increased from 0.5)
+COIN_DELAY = 1.0         # Delay after a successful dispense before next one
+DISPENSING_TIMEOUT = 10  # Maximum time to wait for a single coin
+MAX_RETRY_ATTEMPTS = 5   # Maximum attempts per coin before giving up (increased from 3)
+RETRY_DELAY = 0.5        # Delay between retry attempts
 
 # --- Centralized configuration for the two hoppers ---
 # Hopper A dispenses 1-peso coins
@@ -93,17 +93,30 @@ class HopperController:
                     print(f"[{self.name}] SENSOR: False trigger (pulse too short: {elapsed:.3f}s)")
 
     def _wait_for_coin_passage(self):
+        """Wait for exactly one coin passage through the sensor."""
+        print(f"[{self.name}] Waiting for exactly one coin passage...")
+
+        # Reset detection counters for this attempt
         self.coin_passage_count = 0
         self.sensor_active = False
+
         timeout_start = time.time()
         while (time.time() - timeout_start) < DISPENSING_TIMEOUT:
             if self.coin_passage_count == 1:
+                print(f"[{self.name}] SUCCESS: Exactly one coin passage detected!")
                 return True
             if self.coin_passage_count > 1:
-                print(f"[{self.name}] FAILURE: Multiple coins detected ({self.coin_passage_count})")
+                print(f"[{self.name}] FAILURE: Multiple coins detected ({self.coin_passage_count})! Stopping motor.")
                 return False
             time.sleep(0.01)
-        return self.coin_passage_count == 1
+
+        # Handle timeout condition
+        if self.coin_passage_count == 1:
+            print(f"[{self.name}] SUCCESS: Exactly one coin passage detected (at timeout).")
+            return True
+        else:
+            print(f"[{self.name}] TIMEOUT: Waited {DISPENSING_TIMEOUT}s. Found {self.coin_passage_count} passages.")
+            return False
 
     def _dispense_single_coin_attempt(self):
         self._enable_hopper()
@@ -114,19 +127,36 @@ class HopperController:
         return success
 
     def dispense_single_coin(self):
-        if self.dispensing: return False
+        """Dispense exactly one coin with retry logic."""
+        if self.dispensing:
+            print(f"[{self.name}] Cannot start new dispense, already in progress.")
+            return False
+            
         self.dispensing = True
+        print(f"\n--- [{self.name}] Dispensing 1 coin ---")
+
         attempt = 1
         success = False
         while attempt <= MAX_RETRY_ATTEMPTS:
-            print(f"[{self.name}] Dispense attempt {attempt}/{MAX_RETRY_ATTEMPTS}...")
+            print(f"[{self.name}] Attempt {attempt}/{MAX_RETRY_ATTEMPTS}...")
             if self._dispense_single_coin_attempt():
+                print(f"[{self.name}] SUCCESS: Coin dispensed and verified on attempt {attempt}.")
                 success = True
                 break
             else:
-                if self.coin_passage_count > 1: break # Abort on over-dispense
-                if attempt < MAX_RETRY_ATTEMPTS: time.sleep(RETRY_DELAY)
+                print(f"[{self.name}] FAILED: Attempt {attempt} was unsuccessful.")
+                if self.coin_passage_count > 1:
+                    print(f"[{self.name}] CRITICAL: Dispensed too many coins. Aborting.")
+                    break # Don't retry if we over-dispensed
+                if attempt < MAX_RETRY_ATTEMPTS:
+                    print(f"[{self.name}] Retrying in {RETRY_DELAY}s...")
+                    time.sleep(RETRY_DELAY)
             attempt += 1
+
+        if not success:
+            print(f"[{self.name}] CRITICAL FAILURE: Could not dispense a single coin after {MAX_RETRY_ATTEMPTS} attempts.")
+
+        # Brief pause to allow system to settle before next command
         time.sleep(COIN_DELAY)
         self.dispensing = False
         return success
