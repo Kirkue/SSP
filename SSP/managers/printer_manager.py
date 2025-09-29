@@ -189,12 +189,20 @@ class PrinterThread(QThread):
 
     def _analyze_and_update_ink_usage(self):
         """Analyze ink usage and update database after successful printing."""
+        print("DEBUG: _analyze_and_update_ink_usage called")
         if not self.ink_analysis_manager:
             print("Warning: No ink analysis manager available, skipping ink analysis")
             return
         
+        if not self.db_manager:
+            print("Warning: No database manager available, skipping ink analysis")
+            return
+        
         try:
             print("Starting ink usage analysis after printing...")
+            print(f"DEBUG: PDF path: {self.file_path}")
+            print(f"DEBUG: Selected pages: {self.selected_pages}")
+            print(f"DEBUG: Copies: {self.copies}")
             
             # Use the original PDF file for analysis (not the temp file)
             analysis_result = self.ink_analysis_manager.analyze_and_update_after_print(
@@ -203,6 +211,8 @@ class PrinterThread(QThread):
                 copies=self.copies,
                 dpi=150  # Use standard DPI for analysis
             )
+            
+            print(f"DEBUG: Analysis result: {analysis_result}")
             
             if analysis_result.get('success', False):
                 print("Ink analysis completed successfully")
@@ -215,6 +225,8 @@ class PrinterThread(QThread):
                 
         except Exception as e:
             print(f"Error during ink analysis: {e}")
+            import traceback
+            traceback.print_exc()
             # Don't fail the print job if ink analysis fails
             pass
 

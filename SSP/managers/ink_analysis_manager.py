@@ -26,23 +26,36 @@ class InkAnalysisManager:
             dict: Analysis results with CMYK percentages and usage
         """
         try:
+            print(f"DEBUG: analyze_pdf_ink_usage called")
+            print(f"DEBUG: PDF path: {pdf_path}")
+            print(f"DEBUG: Selected pages: {selected_pages}")
+            print(f"DEBUG: DPI: {dpi}")
+            
             print(f"Analyzing ink usage for PDF: {pdf_path}")
             
             # Convert PDF to images
+            print("DEBUG: Converting PDF to images...")
             pages = convert_from_path(pdf_path, dpi=dpi)
             total_pages = len(pages)
+            print(f"DEBUG: Total pages: {total_pages}")
             
             if total_pages == 0:
+                print("DEBUG: No pages found, returning empty result")
                 return self._create_empty_result()
             
             # Filter to selected pages if specified
             if selected_pages:
+                print(f"DEBUG: Filtering to selected pages: {selected_pages}")
                 # Convert to 0-indexed and filter
                 pages_to_analyze = [pages[i-1] for i in selected_pages if 1 <= i <= total_pages]
             else:
+                print("DEBUG: Analyzing all pages")
                 pages_to_analyze = pages
             
+            print(f"DEBUG: Pages to analyze: {len(pages_to_analyze)}")
+            
             if not pages_to_analyze:
+                print("DEBUG: No pages to analyze, returning empty result")
                 return self._create_empty_result()
             
             # Analyze each page
@@ -50,6 +63,7 @@ class InkAnalysisManager:
             analyzed_pages = 0
             
             for page_image in pages_to_analyze:
+                print(f"DEBUG: Analyzing page {analyzed_pages + 1}")
                 # Convert to OpenCV format (BGR)
                 opencv_image = cv2.cvtColor(np.array(page_image), cv2.COLOR_RGB2BGR)
                 
@@ -70,10 +84,14 @@ class InkAnalysisManager:
             avg_y = total_y / analyzed_pages
             avg_k = total_k / analyzed_pages
             
+            print(f"DEBUG: Averages calculated: C:{avg_c:.2f}% M:{avg_m:.2f}% Y:{avg_y:.2f}% K:{avg_k:.2f}%")
+            
             # Calculate job costs (percentage of cartridge used)
             black_cost, color_cost = self._calculate_job_costs(
                 avg_k, avg_c, avg_m, avg_y, analyzed_pages
             )
+            
+            print(f"DEBUG: Job costs calculated: Black {black_cost:.2f}%, Color {color_cost:.2f}%")
             
             result = {
                 'success': True,
@@ -106,6 +124,8 @@ class InkAnalysisManager:
             
         except Exception as e:
             print(f"Error analyzing PDF ink usage: {e}")
+            import traceback
+            traceback.print_exc()
             return self._create_error_result(str(e))
     
     def _analyze_ink_usage(self, image_data, ignore_white=True):
@@ -198,6 +218,9 @@ class InkAnalysisManager:
             analysis_result (dict): Result from analyze_pdf_ink_usage
             copies (int): Number of copies printed
         """
+        print(f"DEBUG: update_database_after_print called with copies={copies}")
+        print(f"DEBUG: analysis_result={analysis_result}")
+        
         if not self.db_manager:
             print("Warning: No database manager provided, cannot update ink levels")
             return False
@@ -208,7 +231,10 @@ class InkAnalysisManager:
         
         try:
             # Get current ink levels
+            print("DEBUG: Getting current ink levels from database...")
             current_levels = self.db_manager.get_cmyk_ink_levels()
+            print(f"DEBUG: Current levels: {current_levels}")
+            
             if not current_levels:
                 print("Warning: No current ink levels found, cannot update")
                 return False
@@ -217,13 +243,23 @@ class InkAnalysisManager:
             job_costs = analysis_result['job_costs']
             copies_factor = copies
             
+            print(f"DEBUG: Job costs: {job_costs}")
+            print(f"DEBUG: Copies factor: {copies_factor}")
+            
             # Calculate new levels (subtract usage from current levels)
             new_cyan = max(0, current_levels['cyan'] - (job_costs['color_cartridge_percent'] * copies_factor))
             new_magenta = max(0, current_levels['magenta'] - (job_costs['color_cartridge_percent'] * copies_factor))
             new_yellow = max(0, current_levels['yellow'] - (job_costs['color_cartridge_percent'] * copies_factor))
             new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
             
+            print(f"DEBUG: New levels calculated:")
+            print(f"  Cyan: {current_levels['cyan']:.1f}% -> {new_cyan:.1f}%")
+            print(f"  Magenta: {current_levels['magenta']:.1f}% -> {new_magenta:.1f}%")
+            print(f"  Yellow: {current_levels['yellow']:.1f}% -> {new_yellow:.1f}%")
+            print(f"  Black: {current_levels['black']:.1f}% -> {new_black:.1f}%")
+            
             # Update database
+            print("DEBUG: Updating database...")
             success = self.db_manager.update_cmyk_ink_levels(
                 new_cyan, new_magenta, new_yellow, new_black
             )
@@ -241,6 +277,8 @@ class InkAnalysisManager:
                 
         except Exception as e:
             print(f"Error updating ink levels after printing: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def analyze_and_update_after_print(self, pdf_path, selected_pages=None, copies=1, dpi=150):
