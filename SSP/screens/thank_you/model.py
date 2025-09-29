@@ -1,4 +1,5 @@
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+import threading
 
 class ThankYouModel(QObject):
     """Model for the Thank You screen - handles business logic and state management."""
@@ -41,9 +42,19 @@ class ThankYouModel(QObject):
         # Connect to printer manager signals to monitor print completion
         if hasattr(main_app, 'printer_manager'):
             print("Thank you screen: Connecting to printer manager signals...")
+            print("Thank you screen: Connecting print_job_successful signal...")
             main_app.printer_manager.print_job_successful.connect(self._on_print_success)
+            print("Thank you screen: Connecting print_job_failed signal...")
             main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
-            print("Thank you screen: Printer signals connected")
+            print("Thank you screen: Printer signals connected successfully")
+            
+            # Test signal connection
+            print("Thank you screen: Testing signal connection...")
+            try:
+                main_app.printer_manager.print_job_successful.emit()
+                print("Thank you screen: Test signal emitted")
+            except Exception as e:
+                print(f"Thank you screen: Error emitting test signal: {e}")
             
             # Start the print job
             self._start_print_job(main_app)
@@ -52,7 +63,7 @@ class ThankYouModel(QObject):
             self.redirect_timer.start(120000)  # 2 minute safety timeout
             print("Thank you screen: Safety timeout started (2 minutes)")
         else:
-            print("Thank you screen: No printer manager found, this might be an error")
+            print("Thank you screen: ERROR - No printer manager found!")
             # Fallback: start timer if no printer manager
             self.redirect_timer.start(10000)  # 10 second fallback
     
@@ -100,7 +111,10 @@ class ThankYouModel(QObject):
     
     def _on_print_success(self):
         """Handles successful print completion."""
-        print("Thank you screen: Print job completed successfully")
+        print("=" * 60)
+        print("Thank you screen: _on_print_success called - Print job completed successfully")
+        print("Thank you screen: Current thread:", threading.current_thread().name)
+        print("=" * 60)
         
         # Stop the safety timeout since we got the success signal
         if self.redirect_timer.isActive():
