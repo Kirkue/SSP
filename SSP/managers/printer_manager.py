@@ -256,12 +256,12 @@ class PrinterManager(QObject):
     print_job_failed = pyqtSignal(str)
     print_job_waiting = pyqtSignal()
 
-    def __init__(self, db_manager=None):
+    def __init__(self, ink_analysis_thread_manager=None):
         super().__init__()
         config = get_config()
         self.printer_name = config.printer_name
         self.print_thread = None
-        self.db_manager = db_manager
+        self.ink_analysis_thread_manager = ink_analysis_thread_manager
         self.check_printer_availability()
 
     def print_file(self, file_path, copies, color_mode, selected_pages):
@@ -283,7 +283,7 @@ class PrinterManager(QObject):
             color_mode=color_mode,
             selected_pages=selected_pages,
             printer_name=self.printer_name,
-            db_manager=self.db_manager
+            ink_analysis_thread_manager=self.ink_analysis_thread_manager
         )
         self.print_thread.print_success.connect(self.print_job_successful.emit)
         self.print_thread.print_failed.connect(self.print_job_failed.emit)
