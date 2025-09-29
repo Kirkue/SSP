@@ -15,6 +15,7 @@ class ThankYouModel(QObject):
         
         # Screen states
         self.current_state = "initial"
+        self.print_job_started = False
         
     def _on_timer_timeout(self):
         """Called when the redirect timer expires."""
@@ -24,6 +25,12 @@ class ThankYouModel(QObject):
     def on_enter(self, main_app):
         """Called when the screen is shown."""
         self.main_app = main_app
+        
+        # Check if print job has already been started to prevent duplicates
+        if self.print_job_started:
+            print("Thank you screen: Print job already started, skipping duplicate start")
+            return
+        
         self.current_state = "waiting"
         self.status_updated.emit(
             "PRINTING IN PROGRESS...",
@@ -124,6 +131,7 @@ class ThankYouModel(QObject):
                     color_mode=main_app.current_print_job['color_mode']
                 )
                 print("Thank you screen: Print job started successfully")
+                self.print_job_started = True  # Mark that print job has been started
             except Exception as e:
                 print(f"Thank you screen: Error starting print job: {e}")
                 self.show_printing_error(f"Failed to start print job: {e}")
@@ -150,6 +158,10 @@ class ThankYouModel(QObject):
         # Stop the timer if the user navigates away manually
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
+        
+        # Reset the print job started flag for next transaction
+        self.print_job_started = False
+        print("Thank you screen: Print job flag reset for next transaction")
     
     def get_status_style(self, state):
         """Returns the appropriate style for the status label based on state."""

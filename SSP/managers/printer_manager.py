@@ -266,9 +266,10 @@ class PrinterThread(QThread):
         print("DEBUG: Current thread for signal emission:", threading.current_thread().name)
         
         try:
-            # Emit signal directly - PyQt should handle cross-thread emission
-            self.print_success.emit()
-            print("DEBUG: print_success signal emitted from ink analysis callback")
+            # Use QTimer.singleShot to emit signal from main thread
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(0, self.print_success.emit)
+            print("DEBUG: print_success signal queued for main thread emission")
             print("DEBUG: Signal emission completed successfully")
         except Exception as e:
             print(f"DEBUG: ERROR emitting print_success signal: {e}")
@@ -309,6 +310,11 @@ class PrinterManager(QObject):
         print(f"Received print request for {file_path}")
         print(f"Printer name: {self.printer_name}")
         print(f"Copies: {copies}, Color mode: {color_mode}, Pages: {selected_pages}")
+        
+        # Check if a print job is already running
+        if hasattr(self, 'print_thread') and self.print_thread and self.print_thread.isRunning():
+            print("WARNING: Print job already running, ignoring duplicate request")
+            return
         
         # Check if file exists
         if not os.path.exists(file_path):
