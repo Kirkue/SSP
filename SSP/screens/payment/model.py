@@ -329,7 +329,20 @@ class PaymentModel(QObject):
             else:
                 print("DEBUG: No admin screen found")
             
-            self.dispense_thread = DispenseThread(self.change_dispenser, change_amount, admin_screen)
+            # Get database thread manager from main_app
+            database_thread_manager = None
+            if hasattr(self, 'main_app') and hasattr(self.main_app, 'database_thread_manager'):
+                database_thread_manager = self.main_app.database_thread_manager
+                print(f"DEBUG: Database thread manager found: {database_thread_manager}")
+            else:
+                print("DEBUG: No database thread manager found")
+            
+            self.dispense_thread = DispenseThread(
+                self.change_dispenser, 
+                change_amount, 
+                admin_screen, 
+                database_thread_manager
+            )
             self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
             self.dispense_thread.dispensing_finished.connect(self._on_dispensing_finished)
             self.dispense_thread.start()
