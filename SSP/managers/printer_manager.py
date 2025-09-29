@@ -264,7 +264,6 @@ class PrinterThread(QThread):
         # Emit print_success signal now that ink analysis is complete
         print("DEBUG: Ink analysis completed, emitting print_success signal...")
         print("DEBUG: Current thread for signal emission:", threading.current_thread().name)
-        print("DEBUG: Signal connections:", self.print_success.receivers())
         
         try:
             self.print_success.emit()

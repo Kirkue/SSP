@@ -474,12 +474,10 @@ class PaymentModel(QObject):
             # Connect printer signals if not already connected
             if not hasattr(self, '_printer_signals_connected'):
                 print("DEBUG: Connecting printer signals...")
-                print("DEBUG: print_job_successful signal receivers before:", self.main_app.printer_manager.print_job_successful.receivers())
                 self.main_app.printer_manager.print_job_successful.connect(self._on_print_success)
                 self.main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
                 self._printer_signals_connected = True
-                print("DEBUG: Printer signals connected")
-                print("DEBUG: print_job_successful signal receivers after:", self.main_app.printer_manager.print_job_successful.receivers())
+                print("DEBUG: Printer signals connected successfully")
             
             # Add a safety timeout to ensure navigation happens even if signals fail
             from PyQt5.QtCore import QTimer
