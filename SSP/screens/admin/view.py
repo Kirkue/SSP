@@ -2,7 +2,7 @@
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame,
-    QLineEdit, QMessageBox, QGroupBox
+    QLineEdit, QMessageBox, QGroupBox, QGridLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QIntValidator, QDoubleValidator, QPixmap, QPainter
@@ -82,16 +82,17 @@ class AdminScreenView(QWidget):
         group = QGroupBox("Paper Management")
         group.setStyleSheet(self._get_groupbox_style())
         layout = QVBoxLayout(group)
-        layout.setSpacing(15)
+        layout.setSpacing(8)
 
         count_layout = QHBoxLayout()
-        count_layout.addWidget(QLabel("Current Paper Count:", styleSheet="color: #e0e0e0; font-size: 18px;"))
+        count_layout.addWidget(QLabel("Paper Count:", styleSheet="color: #e0e0e0; font-size: 14px;"))
         count_layout.addStretch()
         
         self.paper_count_input = QLineEdit()
         self.paper_count_input.setValidator(QIntValidator(0, 100))
         self.paper_count_input.setAlignment(Qt.AlignCenter)
-        self.paper_count_input.setFixedWidth(100)
+        self.paper_count_input.setFixedWidth(80)
+        self.paper_count_input.setFixedHeight(30)
         self.paper_count_input.returnPressed.connect(
             lambda: self.update_paper_clicked.emit(self.paper_count_input.text())
         )
@@ -99,11 +100,13 @@ class AdminScreenView(QWidget):
         layout.addLayout(count_layout)
 
         button_layout = QHBoxLayout()
-        update_paper_btn = QPushButton("Update Count", clicked=lambda: self.update_paper_clicked.emit(self.paper_count_input.text()))
-        update_paper_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00"))
+        update_paper_btn = QPushButton("Update", clicked=lambda: self.update_paper_clicked.emit(self.paper_count_input.text()))
+        update_paper_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00", font_size="12px"))
+        update_paper_btn.setFixedHeight(30)
         
-        reset_paper_btn = QPushButton("Refill (Reset to 100)", clicked=self.reset_paper_clicked.emit)
-        reset_paper_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a"))
+        reset_paper_btn = QPushButton("Refill", clicked=self.reset_paper_clicked.emit)
+        reset_paper_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="12px"))
+        reset_paper_btn.setFixedHeight(30)
         
         button_layout.addStretch()
         button_layout.addWidget(update_paper_btn)
@@ -114,69 +117,75 @@ class AdminScreenView(QWidget):
         return group
 
     def _create_coin_management_group(self):
-        group = QGroupBox("Coin Inventory Management")
+        group = QGroupBox("Coin Inventory")
         group.setStyleSheet(self._get_groupbox_style())
         layout = QVBoxLayout(group)
-        layout.setSpacing(15)
+        layout.setSpacing(8)
 
+        # Create a horizontal layout for both coins
+        coins_layout = QHBoxLayout()
+        
         # 1 Peso Coins Section
-        peso_1_layout = QHBoxLayout()
-        peso_1_layout.addWidget(QLabel("₱1 Coins:", styleSheet="color: #e0e0e0; font-size: 18px; font-weight: bold;"))
-        peso_1_layout.addStretch()
+        peso_1_layout = QVBoxLayout()
+        peso_1_layout.addWidget(QLabel("P1 Coins:", styleSheet="color: #e0e0e0; font-size: 14px; font-weight: bold;"))
         
         self.coin_1_input = QLineEdit()
         self.coin_1_input.setValidator(QIntValidator(0, 1000))
         self.coin_1_input.setAlignment(Qt.AlignCenter)
-        self.coin_1_input.setFixedWidth(150)
-        self.coin_1_input.setFixedHeight(40)
+        self.coin_1_input.setFixedWidth(80)
+        self.coin_1_input.setFixedHeight(30)
         self.coin_1_input.setStyleSheet("""
             QLineEdit {
-                background-color: #1f1f38; color: white; font-size: 24px;
-                font-weight: bold; border: 3px solid #28a745; border-radius: 8px;
-                padding: 8px 12px;
+                background-color: #1f1f38; color: white; font-size: 14px;
+                font-weight: bold; border: 2px solid #28a745; border-radius: 6px;
+                padding: 4px 8px;
             }
-            QLineEdit:focus { border: 3px solid #ff9800; }
+            QLineEdit:focus { border: 2px solid #ff9800; }
         """)
         self.coin_1_input.returnPressed.connect(
             lambda: self.update_coin_1_clicked.emit(self.coin_1_input.text())
         )
         peso_1_layout.addWidget(self.coin_1_input)
-        layout.addLayout(peso_1_layout)
+        coins_layout.addLayout(peso_1_layout)
 
         # 5 Peso Coins Section
-        peso_5_layout = QHBoxLayout()
-        peso_5_layout.addWidget(QLabel("₱5 Coins:", styleSheet="color: #e0e0e0; font-size: 18px; font-weight: bold;"))
-        peso_5_layout.addStretch()
+        peso_5_layout = QVBoxLayout()
+        peso_5_layout.addWidget(QLabel("P5 Coins:", styleSheet="color: #e0e0e0; font-size: 14px; font-weight: bold;"))
         
         self.coin_5_input = QLineEdit()
         self.coin_5_input.setValidator(QIntValidator(0, 1000))
         self.coin_5_input.setAlignment(Qt.AlignCenter)
-        self.coin_5_input.setFixedWidth(150)
-        self.coin_5_input.setFixedHeight(40)
+        self.coin_5_input.setFixedWidth(80)
+        self.coin_5_input.setFixedHeight(30)
         self.coin_5_input.setStyleSheet("""
             QLineEdit {
-                background-color: #1f1f38; color: white; font-size: 24px;
-                font-weight: bold; border: 3px solid #28a745; border-radius: 8px;
-                padding: 8px 12px;
+                background-color: #1f1f38; color: white; font-size: 14px;
+                font-weight: bold; border: 2px solid #28a745; border-radius: 6px;
+                padding: 4px 8px;
             }
-            QLineEdit:focus { border: 3px solid #ff9800; }
+            QLineEdit:focus { border: 2px solid #ff9800; }
         """)
         self.coin_5_input.returnPressed.connect(
             lambda: self.update_coin_5_clicked.emit(self.coin_5_input.text())
         )
         peso_5_layout.addWidget(self.coin_5_input)
-        layout.addLayout(peso_5_layout)
+        coins_layout.addLayout(peso_5_layout)
+        
+        layout.addLayout(coins_layout)
 
-        # Buttons
+        # Buttons - more compact
         button_layout = QHBoxLayout()
-        update_coin_1_btn = QPushButton("Update ₱1", clicked=lambda: self.update_coin_1_clicked.emit(self.coin_1_input.text()))
-        update_coin_1_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00"))
+        update_coin_1_btn = QPushButton("Update P1", clicked=lambda: self.update_coin_1_clicked.emit(self.coin_1_input.text()))
+        update_coin_1_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00", font_size="12px"))
+        update_coin_1_btn.setFixedHeight(30)
         
-        update_coin_5_btn = QPushButton("Update ₱5", clicked=lambda: self.update_coin_5_clicked.emit(self.coin_5_input.text()))
-        update_coin_5_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00"))
+        update_coin_5_btn = QPushButton("Update P5", clicked=lambda: self.update_coin_5_clicked.emit(self.coin_5_input.text()))
+        update_coin_5_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00", font_size="12px"))
+        update_coin_5_btn.setFixedHeight(30)
         
-        reset_coins_btn = QPushButton("Refill All Coins", clicked=self.reset_coins_clicked.emit)
-        reset_coins_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a"))
+        reset_coins_btn = QPushButton("Refill All", clicked=self.reset_coins_clicked.emit)
+        reset_coins_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="12px"))
+        reset_coins_btn.setFixedHeight(30)
         
         button_layout.addStretch()
         button_layout.addWidget(update_coin_1_btn)
@@ -188,104 +197,95 @@ class AdminScreenView(QWidget):
         return group
 
     def _create_cmyk_management_group(self):
-        group = QGroupBox("CMYK Ink Level Management")
+        group = QGroupBox("CMYK Ink Levels")
         group.setStyleSheet(self._get_groupbox_style())
         layout = QVBoxLayout(group)
-        layout.setSpacing(15)
+        layout.setSpacing(8)
 
-        # Cyan Level
-        cyan_layout = QHBoxLayout()
-        cyan_layout.addWidget(QLabel("Cyan (%):", styleSheet="color: #00bcd4; font-size: 18px; font-weight: bold;"))
-        cyan_layout.addStretch()
+        # Create a 2x2 grid for CMYK inputs
+        grid_layout = QGridLayout()
         
+        # Cyan Level
         self.cyan_input = QLineEdit()
         self.cyan_input.setValidator(QDoubleValidator(0.0, 100.0, 2))
         self.cyan_input.setAlignment(Qt.AlignCenter)
-        self.cyan_input.setFixedWidth(120)
-        self.cyan_input.setFixedHeight(40)
+        self.cyan_input.setFixedWidth(80)
+        self.cyan_input.setFixedHeight(30)
         self.cyan_input.setStyleSheet("""
             QLineEdit {
-                background-color: #1f1f38; color: white; font-size: 18px;
-                font-weight: bold; border: 3px solid #00bcd4; border-radius: 8px;
-                padding: 8px 12px;
+                background-color: #1f1f38; color: white; font-size: 14px;
+                font-weight: bold; border: 2px solid #00bcd4; border-radius: 6px;
+                padding: 4px 8px;
             }
-            QLineEdit:focus { border: 3px solid #ff9800; }
+            QLineEdit:focus { border: 2px solid #ff9800; }
         """)
-        cyan_layout.addWidget(self.cyan_input)
-        layout.addLayout(cyan_layout)
+        grid_layout.addWidget(QLabel("C:", styleSheet="color: #00bcd4; font-size: 14px; font-weight: bold;"), 0, 0)
+        grid_layout.addWidget(self.cyan_input, 0, 1)
 
         # Magenta Level
-        magenta_layout = QHBoxLayout()
-        magenta_layout.addWidget(QLabel("Magenta (%):", styleSheet="color: #e91e63; font-size: 18px; font-weight: bold;"))
-        magenta_layout.addStretch()
-        
         self.magenta_input = QLineEdit()
         self.magenta_input.setValidator(QDoubleValidator(0.0, 100.0, 2))
         self.magenta_input.setAlignment(Qt.AlignCenter)
-        self.magenta_input.setFixedWidth(120)
-        self.magenta_input.setFixedHeight(40)
+        self.magenta_input.setFixedWidth(80)
+        self.magenta_input.setFixedHeight(30)
         self.magenta_input.setStyleSheet("""
             QLineEdit {
-                background-color: #1f1f38; color: white; font-size: 18px;
-                font-weight: bold; border: 3px solid #e91e63; border-radius: 8px;
-                padding: 8px 12px;
+                background-color: #1f1f38; color: white; font-size: 14px;
+                font-weight: bold; border: 2px solid #e91e63; border-radius: 6px;
+                padding: 4px 8px;
             }
-            QLineEdit:focus { border: 3px solid #ff9800; }
+            QLineEdit:focus { border: 2px solid #ff9800; }
         """)
-        magenta_layout.addWidget(self.magenta_input)
-        layout.addLayout(magenta_layout)
+        grid_layout.addWidget(QLabel("M:", styleSheet="color: #e91e63; font-size: 14px; font-weight: bold;"), 0, 2)
+        grid_layout.addWidget(self.magenta_input, 0, 3)
 
         # Yellow Level
-        yellow_layout = QHBoxLayout()
-        yellow_layout.addWidget(QLabel("Yellow (%):", styleSheet="color: #ffeb3b; font-size: 18px; font-weight: bold;"))
-        yellow_layout.addStretch()
-        
         self.yellow_input = QLineEdit()
         self.yellow_input.setValidator(QDoubleValidator(0.0, 100.0, 2))
         self.yellow_input.setAlignment(Qt.AlignCenter)
-        self.yellow_input.setFixedWidth(120)
-        self.yellow_input.setFixedHeight(40)
+        self.yellow_input.setFixedWidth(80)
+        self.yellow_input.setFixedHeight(30)
         self.yellow_input.setStyleSheet("""
             QLineEdit {
-                background-color: #1f1f38; color: white; font-size: 18px;
-                font-weight: bold; border: 3px solid #ffeb3b; border-radius: 8px;
-                padding: 8px 12px;
+                background-color: #1f1f38; color: white; font-size: 14px;
+                font-weight: bold; border: 2px solid #ffeb3b; border-radius: 6px;
+                padding: 4px 8px;
             }
-            QLineEdit:focus { border: 3px solid #ff9800; }
+            QLineEdit:focus { border: 2px solid #ff9800; }
         """)
-        yellow_layout.addWidget(self.yellow_input)
-        layout.addLayout(yellow_layout)
+        grid_layout.addWidget(QLabel("Y:", styleSheet="color: #ffeb3b; font-size: 14px; font-weight: bold;"), 1, 0)
+        grid_layout.addWidget(self.yellow_input, 1, 1)
 
         # Black Level
-        black_layout = QHBoxLayout()
-        black_layout.addWidget(QLabel("Black (%):", styleSheet="color: #424242; font-size: 18px; font-weight: bold;"))
-        black_layout.addStretch()
-        
         self.black_input = QLineEdit()
         self.black_input.setValidator(QDoubleValidator(0.0, 100.0, 2))
         self.black_input.setAlignment(Qt.AlignCenter)
-        self.black_input.setFixedWidth(120)
-        self.black_input.setFixedHeight(40)
+        self.black_input.setFixedWidth(80)
+        self.black_input.setFixedHeight(30)
         self.black_input.setStyleSheet("""
             QLineEdit {
-                background-color: #1f1f38; color: white; font-size: 18px;
-                font-weight: bold; border: 3px solid #424242; border-radius: 8px;
-                padding: 8px 12px;
+                background-color: #1f1f38; color: white; font-size: 14px;
+                font-weight: bold; border: 2px solid #424242; border-radius: 6px;
+                padding: 4px 8px;
             }
-            QLineEdit:focus { border: 3px solid #ff9800; }
+            QLineEdit:focus { border: 2px solid #ff9800; }
         """)
-        black_layout.addWidget(self.black_input)
-        layout.addLayout(black_layout)
+        grid_layout.addWidget(QLabel("K:", styleSheet="color: #424242; font-size: 14px; font-weight: bold;"), 1, 2)
+        grid_layout.addWidget(self.black_input, 1, 3)
 
-        # Buttons
+        layout.addLayout(grid_layout)
+
+        # Buttons - more compact
         button_layout = QHBoxLayout()
-        update_cmyk_btn = QPushButton("Update CMYK Levels", 
+        update_cmyk_btn = QPushButton("Update", 
                                     clicked=lambda: self._update_cmyk_levels())
-        update_cmyk_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00"))
+        update_cmyk_btn.setStyleSheet(self._get_button_style("#ff9800", "#f57c00", font_size="12px"))
+        update_cmyk_btn.setFixedHeight(30)
         
-        reset_cmyk_btn = QPushButton("Refill All Ink (100%)", 
+        reset_cmyk_btn = QPushButton("Refill All", 
                                    clicked=self.reset_cmyk_clicked.emit)
-        reset_cmyk_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a"))
+        reset_cmyk_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="12px"))
+        reset_cmyk_btn.setFixedHeight(30)
         
         button_layout.addStretch()
         button_layout.addWidget(update_cmyk_btn)
@@ -299,17 +299,17 @@ class AdminScreenView(QWidget):
         group = QGroupBox("System & Data")
         group.setStyleSheet(self._get_groupbox_style())
         layout = QVBoxLayout(group)
-        layout.setSpacing(15)
+        layout.setSpacing(8)
 
-        transaction_btn = QPushButton("View System Data Logs", clicked=self.view_data_logs_clicked.emit)
-        transaction_btn.setMinimumHeight(50)
-        transaction_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="18px"))
+        transaction_btn = QPushButton("View Data Logs", clicked=self.view_data_logs_clicked.emit)
+        transaction_btn.setFixedHeight(35)
+        transaction_btn.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="14px"))
         layout.addWidget(transaction_btn)
 
         ink_layout = QHBoxLayout()
-        ink_layout.addWidget(QLabel("Ink Level Status:", styleSheet="color: #e0e0e0; font-size: 18px;"))
+        ink_layout.addWidget(QLabel("Ink Status:", styleSheet="color: #e0e0e0; font-size: 14px;"))
         ink_layout.addStretch()
-        self.ink_status_label = QLabel("Loading...", styleSheet="color: #999999; font-size: 18px; font-style: italic;")
+        self.ink_status_label = QLabel("Loading...", styleSheet="color: #999999; font-size: 14px; font-style: italic;")
         ink_layout.addWidget(self.ink_status_label)
         layout.addLayout(ink_layout)
         
