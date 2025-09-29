@@ -284,10 +284,10 @@ class DatabaseManager:
             result = cursor.fetchone()
             if result:
                 return {
-                    'cyan': result['cyan_level'],
-                    'magenta': result['magenta_level'],
-                    'yellow': result['yellow_level'],
-                    'black': result['black_level'],
+                    'cyan': float(result['cyan_level']),
+                    'magenta': float(result['magenta_level']),
+                    'yellow': float(result['yellow_level']),
+                    'black': float(result['black_level']),
                     'last_updated': result['last_updated']
                 }
             return None
