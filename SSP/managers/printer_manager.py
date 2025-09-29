@@ -2,6 +2,7 @@
 import os
 import subprocess
 import tempfile
+import threading
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from config import get_config
 from managers.ink_analysis_manager import InkAnalysisManager
@@ -262,6 +263,8 @@ class PrinterThread(QThread):
         
         # Emit print_success signal now that ink analysis is complete
         print("DEBUG: Ink analysis completed, emitting print_success signal...")
+        print("DEBUG: Current thread for signal emission:", threading.current_thread().name)
+        print("DEBUG: Signal connections:", self.print_success.receivers())
         self.print_success.emit()
         print("DEBUG: print_success signal emitted from ink analysis callback")
 
