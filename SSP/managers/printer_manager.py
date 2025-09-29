@@ -33,8 +33,13 @@ class PrinterThread(QThread):
         if db_manager:
             from database.db_manager import DatabaseManager
             print("DEBUG: Creating new database manager for printer thread")
+            # Create a completely new database manager with a fresh connection
             self.thread_db_manager = DatabaseManager()
             print(f"DEBUG: Thread DB manager created: {self.thread_db_manager}")
+            # Force a new connection in this thread
+            self.thread_db_manager.close()  # Close any existing connection
+            self.thread_db_manager.connect()  # Create new connection in this thread
+            print(f"DEBUG: New database connection created in printer thread")
             self.ink_analysis_manager = InkAnalysisManager(self.thread_db_manager)
             print(f"DEBUG: Ink analysis manager created with thread DB manager")
         else:
