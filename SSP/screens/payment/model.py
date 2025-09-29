@@ -319,29 +319,40 @@ class PaymentModel(QObject):
         
         # Handle change dispensing
         if change_amount > 0:
+            print(f"DEBUG: Starting change dispensing for ₱{change_amount:.2f}")
             self.payment_status_updated.emit(f"Printing... Now dispensing change: ₱{change_amount:.2f}")
             # Get admin screen from main_app to pass to dispense thread
             admin_screen = None
             if hasattr(self, 'main_app') and hasattr(self.main_app, 'admin_screen'):
                 admin_screen = self.main_app.admin_screen
+                print(f"DEBUG: Admin screen found: {admin_screen}")
+            else:
+                print("DEBUG: No admin screen found")
             
             self.dispense_thread = DispenseThread(self.change_dispenser, change_amount, admin_screen)
             self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
             self.dispense_thread.dispensing_finished.connect(self._on_dispensing_finished)
             self.dispense_thread.start()
+            print("DEBUG: Dispense thread started")
         else:
+            print("DEBUG: No change to dispense, calling _on_dispensing_finished directly")
             self._on_dispensing_finished(True)
         
         return True, "Payment completed successfully"
     
     def _on_dispensing_finished(self, success):
         """Handles the completion of change dispensing."""
+        print(f"DEBUG: _on_dispensing_finished called with success={success}")
         if success:
             print("Dispensing complete.")
         else:
             print("CRITICAL: Error dispensing change.")
-        # Signal to go to thank you screen
-        self.payment_completed.emit({'navigate_to': 'thank_you'})
+        # Navigate to thank you screen after dispensing is complete
+        if hasattr(self, 'main_app') and self.main_app:
+            print("DEBUG: Navigating to thank you screen")
+            self.main_app.show_screen('thank_you')
+        else:
+            print("DEBUG: No main_app available for navigation")
     
     def on_enter(self):
         """Called when the payment screen is shown."""
