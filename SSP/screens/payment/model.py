@@ -36,6 +36,12 @@ class GPIOPaymentThread(QThread):
         self.COIN_TIMEOUT = 0.5    # seconds without pulses = end of coin
         self.PULSE_TIMEOUT = 0.5   # Time to wait for additional bill pulses
         self.DEBOUNCE_TIME = 0.1   # Minimum time between pulses
+        
+        # Print-related attributes
+        self.print_file_path = None
+        self.selected_pages = None
+        self.copies = 1
+        self.color_mode = "Color"
 
     def setup_gpio(self):
         try:
@@ -169,6 +175,18 @@ class PaymentModel(QObject):
         self.amount_received = 0
         self.cash_received = {}
         self.payment_ready = False
+        
+        # Extract print-related attributes for later use
+        if 'pdf_data' in payment_data and 'path' in payment_data['pdf_data']:
+            self.print_file_path = payment_data['pdf_data']['path']
+        if 'selected_pages' in payment_data:
+            self.selected_pages = payment_data['selected_pages']
+        if 'copies' in payment_data:
+            self.copies = payment_data['copies']
+        if 'color_mode' in payment_data:
+            self.color_mode = payment_data['color_mode']
+        
+        print(f"DEBUG: Print attributes set - file: {self.print_file_path}, pages: {self.selected_pages}, copies: {self.copies}, mode: {self.color_mode}")
         
         # Prepare summary data for UI
         analysis = payment_data.get('analysis', {})
@@ -405,6 +423,21 @@ class PaymentModel(QObject):
         """Start the printing process after change has been dispensed."""
         print("DEBUG: Starting printing process...")
         self.payment_status_updated.emit("Change dispensed. Starting to print...")
+        
+        # Check if all required print attributes are available
+        if not self.print_file_path:
+            print("ERROR: No print file path available")
+            self.payment_status_updated.emit("Error: No print file path available")
+            self._navigate_to_thank_you()
+            return
+            
+        if not self.selected_pages:
+            print("ERROR: No selected pages available")
+            self.payment_status_updated.emit("Error: No selected pages available")
+            self._navigate_to_thank_you()
+            return
+        
+        print(f"DEBUG: Print job details - file: {self.print_file_path}, pages: {self.selected_pages}, copies: {self.copies}, mode: {self.color_mode}")
         
         # Start the print job
         if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
