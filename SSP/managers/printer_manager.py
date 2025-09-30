@@ -116,11 +116,10 @@ class PrinterThread(QThread):
                 if not completion_success:
                     print("WARNING: Print job completion check failed, but continuing...")
             else:
-                # If we can't get job ID, wait a reasonable time for printing
-                print("WARNING: No job ID available, waiting 60 seconds for print job to complete...")
-                self.print_waiting.emit()
-                import time
-                time.sleep(60)  # Increased from 30 to 60 seconds
+                # If we can't get job ID, this is a critical error
+                print("ERROR: No job ID available - print job was not accepted by CUPS")
+                self.print_failed.emit("Print job was not accepted by CUPS. Check printer connection.")
+                return
             
             # Step 5: Analyze ink usage and update database
             print("DEBUG: About to start ink analysis...")
@@ -131,13 +130,15 @@ class PrinterThread(QThread):
             except Exception as e:
                 print(f"DEBUG: Ink analysis failed: {e}")
                 print("DEBUG: Continuing despite ink analysis failure...")
-                # Only emit success if we actually completed a print job
-                if job_id or completion_success:
-                    print("DEBUG: Emitting print_success signal - print job was completed")
-                    self.print_success.emit()
-                    print("DEBUG: print_success signal emitted")
-                else:
-                    print("DEBUG: No print job was actually completed, not emitting success")
+            # Only emit success if we actually completed a print job
+            if job_id or completion_success:
+                print("DEBUG: Emitting print_success signal - print job was completed")
+                self.print_success.emit()
+                print("DEBUG: print_success signal emitted")
+            else:
+                print("DEBUG: No print job was actually completed, not emitting success")
+                # If no job was completed, emit failure instead
+                self.print_failed.emit("Print job was not completed successfully.")
 
         except subprocess.TimeoutExpired:
             error_message = "Printing command timed out."
