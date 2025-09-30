@@ -65,13 +65,29 @@ class HopperController:
             self.callback = None
 
     def _enable_hopper(self):
-        self.pi.write(self.enable_pin, 0) # Active low
-        self.enabled = True
-        print(f"[{self.name}] Hopper motor ENABLED")
+        if not self.pi or not self.pi.connected:
+            print(f"[{self.name}] ERROR: pigpio connection not available")
+            return False
+        try:
+            self.pi.write(self.enable_pin, 0) # Active low
+            self.enabled = True
+            print(f"[{self.name}] Hopper motor ENABLED")
+            return True
+        except Exception as e:
+            print(f"[{self.name}] ERROR: Failed to enable hopper: {e}")
+            return False
 
     def _disable_hopper(self):
-        self.pi.write(self.enable_pin, 1) # Inactive high
-        self.enabled = False
+        if not self.pi or not self.pi.connected:
+            print(f"[{self.name}] ERROR: pigpio connection not available")
+            return False
+        try:
+            self.pi.write(self.enable_pin, 1) # Inactive high
+            self.enabled = False
+            return True
+        except Exception as e:
+            print(f"[{self.name}] ERROR: Failed to disable hopper: {e}")
+            return False
 
     def _sensor_callback(self, gpio, level, tick):
         current_time = self.pi.get_current_tick()
@@ -120,8 +136,15 @@ class HopperController:
 
     def _dispense_single_coin_attempt(self):
         """Single attempt to dispense exactly one coin."""
+        # Check if pigpio connection is available
+        if not self.pi or not self.pi.connected:
+            print(f"[{self.name}] ERROR: pigpio connection not available, cannot dispense")
+            return False
+            
         # Enable hopper motor
-        self._enable_hopper()
+        if not self._enable_hopper():
+            print(f"[{self.name}] ERROR: Failed to enable hopper")
+            return False
 
         # Wait for exactly one coin passage
         success = self._wait_for_coin_passage()
@@ -198,10 +221,43 @@ class ChangeDispenser:
                 print(f"CRITICAL: Failed to initialize pigpio or hoppers: {e}. Switching to simulation mode.")
                 self.simulated = True
 
+    def check_connection(self):
+        """Check if pigpio connection is still valid and try to reconnect if needed."""
+        if self.simulated:
+            return True
+            
+        if not self.pi or not self.pi.connected:
+            print("pigpio connection lost, attempting to reconnect...")
+            try:
+                if self.pi:
+                    self.pi.stop()
+                self.pi = pigpio.pi()
+                if self.pi.connected:
+                    print("pigpio connection restored")
+                    # Update all hopper controllers with new pi instance
+                    for name, hopper in self.hoppers.items():
+                        hopper.pi = self.pi
+                    return True
+                else:
+                    print("Failed to restore pigpio connection")
+                    return False
+            except Exception as e:
+                print(f"Error reconnecting to pigpio: {e}")
+                return False
+        return True
+
     def dispense_change(self, amount: float, status_callback=None, admin_screen=None, database_thread_manager=None):
         """Calculates and dispenses the correct change, one coin at a time. Returns actual coins dispensed."""
         if amount <= 0:
             return {'success': True, 'coins_1': 0, 'coins_5': 0}
+
+        # Check connection before starting
+        if not self.check_connection():
+            error_msg = "CRITICAL: pigpio connection not available. Cannot dispense change."
+            print(error_msg)
+            if status_callback:
+                status_callback(error_msg)
+            return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'pigpio_connection_failed'}
 
         num_fives = int(amount // 5)
         num_ones = int(round(amount % 5))

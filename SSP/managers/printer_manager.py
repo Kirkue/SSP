@@ -6,6 +6,7 @@ import threading
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from config import get_config
 from managers.ink_analysis_manager import InkAnalysisManager
+from managers.sms_manager import send_paper_jam_sms
 
 try:
     import fitz  # PyMuPDF
@@ -183,6 +184,26 @@ class PrinterThread(QThread):
                     print(f"Print job {job_id} completed after {elapsed_time} seconds")
                     return True
                 else:
+                    # Check for paper jam during printing
+                    printer_status = self._check_printer_status()
+                    if printer_status['status'] == 'paper_jam':
+                        print(f"Paper jam detected during printing: {printer_status['message']}")
+                        
+                        # Send SMS notification for paper jam
+                        print("Paper jam detected during printing - sending SMS notification")
+                        try:
+                            send_paper_jam_sms()
+                            print("SMS notification sent for paper jam during printing")
+                        except Exception as e:
+                            print(f"Failed to send SMS notification: {e}")
+                        
+                        self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
+                        return False
+                    elif printer_status['status'] == 'offline':
+                        print(f"Printer went offline during printing: {printer_status['message']}")
+                        self.print_failed.emit(f"Printer offline: {printer_status['message']}")
+                        return False
+                    
                     print(f"Print job {job_id} still printing... ({elapsed_time}s elapsed)")
                     time.sleep(check_interval)
                     elapsed_time += check_interval
@@ -278,6 +299,61 @@ class PrinterThread(QThread):
         
         print("DEBUG: Ink analysis callback method completed")
 
+    def _check_printer_status(self):
+        """Check printer status for errors including paper jams."""
+        try:
+            # Get detailed printer status
+            result = subprocess.run(['lpstat', '-p', self.printer_name], 
+                                  capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return {
+                    'status': 'error',
+                    'message': f"Printer '{self.printer_name}' not found or not responding",
+                    'details': result.stderr.strip()
+                }
+            
+            output = result.stdout.lower()
+            
+            # Check for various error conditions
+            if 'jam' in output or 'paper jam' in output:
+                return {
+                    'status': 'paper_jam',
+                    'message': 'Paper jam detected',
+                    'details': 'Please clear the paper jam and try again'
+                }
+            elif 'offline' in output or 'stopped' in output:
+                return {
+                    'status': 'offline',
+                    'message': 'Printer is offline or stopped',
+                    'details': 'Please check printer connection and power'
+                }
+            elif 'error' in output:
+                return {
+                    'status': 'error',
+                    'message': 'Printer error detected',
+                    'details': output
+                }
+            elif 'idle' in output or 'ready' in output:
+                return {
+                    'status': 'ready',
+                    'message': 'Printer is ready',
+                    'details': 'Printer is available for printing'
+                }
+            else:
+                return {
+                    'status': 'unknown',
+                    'message': 'Unknown printer status',
+                    'details': output
+                }
+                
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f"Error checking printer status: {e}",
+                'details': str(e)
+            }
+
     def cleanup_temp_pdf(self):
         """Deletes the temporary PDF file if it was created."""
         if self.temp_pdf_path and os.path.exists(self.temp_pdf_path):
@@ -314,6 +390,26 @@ class PrinterManager(QObject):
         # Check if a print job is already running
         if hasattr(self, 'print_thread') and self.print_thread and self.print_thread.isRunning():
             print("WARNING: Print job already running, ignoring duplicate request")
+            return
+        
+        # Check printer status before starting print job
+        printer_status = self.check_printer_status()
+        if printer_status['status'] == 'paper_jam':
+            # Send SMS notification for paper jam
+            print("Paper jam detected - sending SMS notification")
+            try:
+                send_paper_jam_sms()
+                print("SMS notification sent for paper jam")
+            except Exception as e:
+                print(f"Failed to send SMS notification: {e}")
+            
+            self.print_job_failed.emit(f"Paper jam detected: {printer_status['message']}")
+            return
+        elif printer_status['status'] == 'offline':
+            self.print_job_failed.emit(f"Printer offline: {printer_status['message']}")
+            return
+        elif printer_status['status'] == 'error':
+            self.print_job_failed.emit(f"Printer error: {printer_status['message']}")
             return
         
         # Check if file exists
@@ -359,6 +455,66 @@ class PrinterManager(QObject):
         except Exception as e:
             print(f"Error checking printer availability: {e}")
             return False
+
+    def check_printer_status(self):
+        """Check printer status for errors including paper jams."""
+        try:
+            # Get detailed printer status
+            result = subprocess.run(['lpstat', '-p', self.printer_name], 
+                                  capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return {
+                    'status': 'error',
+                    'message': f"Printer '{self.printer_name}' not found or not responding",
+                    'details': result.stderr.strip()
+                }
+            
+            output = result.stdout.lower()
+            
+            # Check for various error conditions
+            if 'jam' in output or 'paper jam' in output:
+                return {
+                    'status': 'paper_jam',
+                    'message': 'Paper jam detected',
+                    'details': 'Please clear the paper jam and try again'
+                }
+            elif 'offline' in output or 'stopped' in output:
+                return {
+                    'status': 'offline',
+                    'message': 'Printer is offline or stopped',
+                    'details': 'Please check printer connection and power'
+                }
+            elif 'error' in output:
+                return {
+                    'status': 'error',
+                    'message': 'Printer error detected',
+                    'details': output
+                }
+            elif 'idle' in output or 'ready' in output:
+                return {
+                    'status': 'ready',
+                    'message': 'Printer is ready',
+                    'details': 'Printer is available for printing'
+                }
+            else:
+                return {
+                    'status': 'unknown',
+                    'message': 'Unknown printer status',
+                    'details': output
+                }
+                
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f"Error checking printer status: {e}",
+                'details': str(e)
+            }
+
+    def check_for_paper_jam(self):
+        """Specifically check for paper jam condition."""
+        status = self.check_printer_status()
+        return status['status'] == 'paper_jam'
 
     def on_thread_finished(self):
         print("Print thread has finished.")
