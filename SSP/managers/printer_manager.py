@@ -189,16 +189,14 @@ class PrinterThread(QThread):
             self.temp_pdf_path = None
 
     def wait_for_print_completion(self, job_id):
-        """Wait for the print job to actually complete with enhanced monitoring."""
+        """Wait for the print job to actually complete with simplified monitoring."""
         import time
         
         print(f"Waiting for print job {job_id} to complete...")
         config = get_config()
         max_wait_time = config.printer_timeout * 10  # 10x timeout for completion wait
-        check_interval = 3   # Check every 3 seconds for more responsive monitoring
+        check_interval = 5   # Check every 5 seconds (back to original)
         elapsed_time = 0
-        consecutive_idle_checks = 0
-        required_idle_checks = 2  # Require 2 consecutive idle checks to confirm completion
         
         while elapsed_time < max_wait_time:
             try:
@@ -209,50 +207,36 @@ class PrinterThread(QThread):
                 print(f"lpstat result for {job_id}: returncode={result.returncode}, stdout='{result.stdout.strip()}'")
                 
                 if result.returncode != 0 or not result.stdout.strip():
-                    # Job is no longer in the queue, now verify printer is idle
-                    print(f"Print job {job_id} no longer in queue, verifying printer is idle...")
-                    
-                    # Check printer status to ensure it's truly idle
-                    printer_status = self._check_printer_status()
-                    if printer_status['status'] == 'ready':
-                        consecutive_idle_checks += 1
-                        print(f"Printer is idle (check {consecutive_idle_checks}/{required_idle_checks})")
-                        
-                        if consecutive_idle_checks >= required_idle_checks:
-                            print(f"Print job {job_id} completed and printer confirmed idle after {elapsed_time} seconds")
-                            return True
-                    else:
-                        print(f"Printer not idle yet: {printer_status['status']} - {printer_status['message']}")
-                        consecutive_idle_checks = 0  # Reset counter if not idle
+                    # Job is no longer in the queue, it's completed
+                    print(f"Print job {job_id} completed after {elapsed_time} seconds")
+                    return True
                 else:
-                    # Job still in queue, check for errors
-                    print(f"Print job {job_id} still in queue... ({elapsed_time}s elapsed)")
+                    # Job still in queue, check for critical errors only
+                    print(f"Print job {job_id} still printing... ({elapsed_time}s elapsed)")
                     
-                    # Check for paper jam during printing
-                    printer_status = self._check_printer_status()
-                    if printer_status['status'] == 'paper_jam':
-                        print(f"Paper jam detected during printing: {printer_status['message']}")
-                        
-                        # Send SMS notification for paper jam
-                        print("Paper jam detected during printing - sending SMS notification")
-                        try:
-                            send_paper_jam_sms()
-                            print("SMS notification sent for paper jam during printing")
-                        except Exception as e:
-                            print(f"Failed to send SMS notification: {e}")
-                        
-                        self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
-                        return False
-                    elif printer_status['status'] == 'offline':
-                        print(f"Printer went offline during printing: {printer_status['message']}")
-                        self.print_failed.emit(f"Printer offline: {printer_status['message']}")
-                        return False
-                    elif printer_status['status'] == 'error':
-                        print(f"Printer error during printing: {printer_status['message']}")
-                        self.print_failed.emit(f"Printer error: {printer_status['message']}")
-                        return False
-                    
-                    consecutive_idle_checks = 0  # Reset counter while job is still active
+                    # Only check for critical errors that would stop printing
+                    try:
+                        printer_status = self._check_printer_status()
+                        if printer_status['status'] == 'paper_jam':
+                            print(f"Paper jam detected during printing: {printer_status['message']}")
+                            
+                            # Send SMS notification for paper jam
+                            print("Paper jam detected during printing - sending SMS notification")
+                            try:
+                                send_paper_jam_sms()
+                                print("SMS notification sent for paper jam during printing")
+                            except Exception as e:
+                                print(f"Failed to send SMS notification: {e}")
+                            
+                            self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
+                            return False
+                        elif printer_status['status'] == 'offline':
+                            print(f"Printer went offline during printing: {printer_status['message']}")
+                            self.print_failed.emit(f"Printer offline: {printer_status['message']}")
+                            return False
+                    except Exception as e:
+                        print(f"Error checking printer status during printing: {e}")
+                        # Don't fail the print job for status check errors
                     
                 time.sleep(check_interval)
                 elapsed_time += check_interval
@@ -441,38 +425,9 @@ class PrinterManager(QObject):
             print("WARNING: Print job already running, ignoring duplicate request")
             return
         
-        # Check printer status before starting print job
-        printer_status = self.check_printer_status()
-        if printer_status['status'] == 'paper_jam':
-            # Send SMS notification for paper jam
-            print("Paper jam detected - sending SMS notification")
-            try:
-                send_paper_jam_sms()
-                print("SMS notification sent for paper jam")
-            except Exception as e:
-                print(f"Failed to send SMS notification: {e}")
-            
-            self.print_job_failed.emit(f"Paper jam detected: {printer_status['message']}")
-            return
-        elif printer_status['status'] == 'offline':
-            error_message = f"Printer offline: {printer_status['message']}"
-            print(f"Printer error - sending SMS notification: {error_message}")
-            try:
-                send_printing_error_sms(error_message)
-                print("SMS notification sent for printer offline")
-            except Exception as e:
-                print(f"Failed to send SMS notification: {e}")
-            self.print_job_failed.emit(error_message)
-            return
-        elif printer_status['status'] == 'error':
-            error_message = f"Printer error: {printer_status['message']}"
-            print(f"Printer error - sending SMS notification: {error_message}")
-            try:
-                send_printing_error_sms(error_message)
-                print("SMS notification sent for printer error")
-            except Exception as e:
-                print(f"Failed to send SMS notification: {e}")
-            self.print_job_failed.emit(error_message)
+        # Check printer availability (basic check only)
+        if not self.check_printer_availability():
+            self.print_job_failed.emit("Printer is not available. Please check printer connection.")
             return
         
         # Check if file exists

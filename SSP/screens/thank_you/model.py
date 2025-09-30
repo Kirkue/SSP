@@ -212,55 +212,26 @@ class ThankYouModel(QObject):
             self.show_printing_error("No print job details available")
     
     def _check_print_status(self):
-        """Enhanced printer status checking with multiple verification methods."""
+        """Simplified printer status checking as fallback."""
         # Only check if we're still waiting (signal not received)
         if self.current_state != "waiting":
             return
             
-        print("Thank you screen: Enhanced fallback - Checking printer status...")
+        print("Thank you screen: Fallback - Checking printer status...")
         
         try:
-            # Method 1: Check printer status using lpstat
+            # Check if printer is idle using lpstat command
             result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True, timeout=5)
             
             if result.returncode == 0:
+                # Parse the output to see if printer is idle
                 output = result.stdout.lower()
-                print(f"Thank you screen: Printer status output: {output}")
-                
-                # Check for idle/ready status
                 if 'idle' in output or 'ready' in output:
-                    print("Thank you screen: Fallback - Printer appears idle")
-                    
-                    # Method 2: Double-check with detailed printer status
-                    try:
-                        detailed_result = subprocess.run(['lpstat', '-t'], capture_output=True, text=True, timeout=5)
-                        if detailed_result.returncode == 0:
-                            detailed_output = detailed_result.stdout.lower()
-                            print(f"Thank you screen: Detailed status: {detailed_output}")
-                            
-                            # Look for specific indicators that printing is complete
-                            if ('idle' in detailed_output and 'printing' not in detailed_output and 
-                                'processing' not in detailed_output):
-                                print("Thank you screen: Fallback - Printer confirmed idle, print job completed")
-                                print("Thank you screen: Signal not received, using fallback method")
-                                self._on_print_success()
-                                return
-                            else:
-                                print("Thank you screen: Fallback - Printer still processing")
-                        else:
-                            print("Thank you screen: Fallback - Detailed status check failed")
-                    except Exception as e:
-                        print(f"Thank you screen: Fallback - Error in detailed status check: {e}")
-                    
-                    # If detailed check fails, use basic idle detection
-                    print("Thank you screen: Fallback - Using basic idle detection")
+                    print("Thank you screen: Fallback - Printer is idle, print job completed")
+                    print("Thank you screen: Signal not received, using fallback method")
                     self._on_print_success()
                 else:
                     print("Thank you screen: Fallback - Printer is still busy")
-                    # Check for specific error conditions
-                    if 'error' in output or 'offline' in output or 'stopped' in output:
-                        print("Thank you screen: Fallback - Printer error detected")
-                        self.show_printing_error("Printer error detected during printing")
             else:
                 print(f"Thank you screen: Fallback - lpstat failed with return code {result.returncode}")
                 print(f"Thank you screen: Error output: {result.stderr}")
@@ -274,23 +245,13 @@ class ThankYouModel(QObject):
         """Start the timers in the main thread with enhanced monitoring."""
         print("Thank you screen: Starting enhanced timers in main thread...")
         
-        # Start periodic printer status check as fallback (every 3 seconds for more responsive monitoring)
-        self.status_check_timer.start(3000)  # Check every 3 seconds
-        print("Thank you screen: Enhanced printer status check started (every 3 seconds)")
+        # Start periodic printer status check as fallback (every 10 seconds)
+        self.status_check_timer.start(10000)  # Check every 10 seconds (back to original)
+        print("Thank you screen: Printer status check started as fallback (every 10 seconds)")
         
-        # Start a safety timeout in case both methods fail (3 minutes for longer print jobs)
-        self.redirect_timer.start(180000)  # 3 minute safety timeout
-        print("Thank you screen: Safety timeout started (3 minutes)")
-        
-        # Add a warning timer to alert if printing takes too long
-        if not hasattr(self, 'warning_timer'):
-            from PyQt5.QtCore import QTimer
-            self.warning_timer = QTimer()
-            self.warning_timer.setSingleShot(True)
-            self.warning_timer.timeout.connect(self._show_printing_warning)
-        
-        self.warning_timer.start(60000)  # Show warning after 1 minute
-        print("Thank you screen: Warning timer started (1 minute)")
+        # Start a safety timeout in case both methods fail (2 minutes)
+        self.redirect_timer.start(120000)  # 2 minute safety timeout (back to original)
+        print("Thank you screen: Safety timeout started (2 minutes)")
     
     def _on_print_failed(self, error_message):
         """Handles print job failure."""
