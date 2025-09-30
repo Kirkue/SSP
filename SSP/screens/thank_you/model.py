@@ -115,20 +115,45 @@ class ThankYouModel(QObject):
         """Updates the state to show a printing error."""
         self.current_state = "error"
         
+        # Check if this is a paper jam error
+        is_paper_jam = "paper jam" in message.lower() or "jam" in message.lower()
+        
         # Sanitize common, verbose CUPS errors for a better user display
         if "client-error-document-format-not-supported" in message:
             clean_message = "Document format is not supported by the printer."
         elif "CUPS Error" in message:
             clean_message = "Could not communicate with the printer."
+        elif is_paper_jam:
+            clean_message = "Paper jam detected. Please clear the paper jam."
         else:
             clean_message = "An unknown printing error occurred."
+        
+        # Set the error type for admin override handling
+        self.error_type = "paper_jam" if is_paper_jam else "printing_error"
         
         self.status_updated.emit(
             "PRINTING FAILED",
             f"Error: {clean_message}\nPlease contact an administrator."
         )
         
-        # Show admin override button and don't auto-redirect
+        # Emit signal to show admin override button for all printing errors
+        print(f"Thank you screen: Emitting admin_override_requested for {self.error_type}")
+        self.admin_override_requested.emit()
+        
+        # Don't start automatic redirect timer for errors - wait for admin override
+    
+    def show_paper_jam_error(self, message: str):
+        """Updates the state to show a paper jam error specifically."""
+        self.current_state = "error"
+        self.error_type = "paper_jam"
+        
+        self.status_updated.emit(
+            "PAPER JAM DETECTED",
+            f"Paper jam detected. Please clear the paper jam and try again.\nContact an administrator if needed."
+        )
+        
+        # Emit signal to show admin override button
+        print("Thank you screen: Emitting admin_override_requested for paper jam")
         self.admin_override_requested.emit()
         
         # Don't start automatic redirect timer for errors - wait for admin override

@@ -63,6 +63,10 @@ class ThankYouController(QWidget):
         """Public method to show printing error."""
         self.model.show_printing_error(message)
     
+    def show_paper_jam_error(self, message: str):
+        """Public method to show paper jam error specifically."""
+        self.model.show_paper_jam_error(message)
+    
     def _show_admin_override_button(self):
         """Shows the admin override button when an error occurs."""
         print("Thank you screen: Showing admin override button")

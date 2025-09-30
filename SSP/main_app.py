@@ -203,7 +203,13 @@ class PrintingSystemApp(QMainWindow):
         print(f"❌ Print job failed: {error_message}")
         # Tell the thank you screen to show an error message
         if self.stacked_widget.currentWidget() == self.thank_you_screen:
-            self.thank_you_screen.show_printing_error(error_message)
+            # Check if this is a paper jam error
+            if "paper jam" in error_message.lower() or "jam" in error_message.lower():
+                print("Detected paper jam error - showing paper jam error screen")
+                self.thank_you_screen.show_paper_jam_error(error_message)
+            else:
+                print("Detected general printing error - showing printing error screen")
+                self.thank_you_screen.show_printing_error(error_message)
         else:
             print(f"Warning: Print failed signal received, but not on thank you screen. Error: {error_message}")
 
