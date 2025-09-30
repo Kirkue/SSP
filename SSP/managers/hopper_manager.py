@@ -56,10 +56,13 @@ class HopperController:
                 # Clean up any existing callbacks on this pin first
                 self._cleanup_callbacks()
                 
-                # Setup GPIO exactly like working code
+                # Setup GPIO with better noise filtering
                 self.pi.set_mode(self.signal_pin, pigpio.INPUT)
                 self.pi.set_pull_up_down(self.signal_pin, pigpio.PUD_UP)
                 self.pi.set_mode(self.enable_pin, pigpio.OUTPUT)
+                
+                # Add hardware debouncing by setting GPIO glitch filter
+                self.pi.set_glitch_filter(self.signal_pin, 10000)  # 10ms hardware debounce
                 
                 # Monitor both rising and falling edges to track coin passage
                 self.callback = self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE, self._sensor_callback)
@@ -83,6 +86,25 @@ class HopperController:
                 print(f"[{self.name}] Cleaned up existing callbacks on pin {self.signal_pin}")
         except Exception as e:
             print(f"[{self.name}] Warning: Error cleaning up callbacks: {e}")
+
+    def disable_sensor(self):
+        """Temporarily disable sensor to reduce false triggers."""
+        try:
+            if self.callback:
+                self.callback.cancel()
+                self.callback = None
+                print(f"[{self.name}] Sensor disabled to reduce false triggers")
+        except Exception as e:
+            print(f"[{self.name}] Error disabling sensor: {e}")
+    
+    def enable_sensor(self):
+        """Re-enable sensor for coin detection."""
+        try:
+            if self.pi and self.pi.connected and not self.callback:
+                self.callback = self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE, self._sensor_callback)
+                print(f"[{self.name}] Sensor re-enabled for coin detection")
+        except Exception as e:
+            print(f"[{self.name}] Error enabling sensor: {e}")
 
     def cleanup(self):
         """Clean up GPIO resources."""
@@ -124,6 +146,13 @@ class HopperController:
 
     def _sensor_callback(self, gpio, level, tick):
         current_time = self.pi.get_current_tick()
+        
+        # Add cooldown period to prevent rapid false triggers
+        if hasattr(self, 'last_callback_time'):
+            time_since_last = pigpio.tickDiff(self.last_callback_time, current_time) / 1000000.0
+            if time_since_last < 0.05:  # 50ms cooldown between callbacks
+                return
+        self.last_callback_time = current_time
 
         if level == 0:  # Falling edge - coin detected
             if not self.sensor_active:
@@ -135,11 +164,15 @@ class HopperController:
                 self.sensor_active = False
                 # pigpio tick is a 32-bit unsigned int, handle wraparound
                 elapsed = pigpio.tickDiff(self.last_sensor_change, current_time) / 1000000.0
-                if elapsed > 0.01:  # Debounce: Minimum time for valid coin passage (10ms)
+                
+                # Increased debounce time and added maximum time filter
+                if 0.05 <= elapsed <= 2.0:  # Valid coin passage: 50ms to 2 seconds
                     self.coin_passage_count += 1
                     print(f"[{self.name}] SENSOR: Coin passage complete (took {elapsed:.3f}s). Total passages in this cycle: {self.coin_passage_count}")
+                elif elapsed < 0.05:
+                    print(f"[{self.name}] SENSOR: False trigger (pulse too short: {elapsed:.3f}s) - ignored")
                 else:
-                    print(f"[{self.name}] SENSOR: False trigger (pulse too short: {elapsed:.3f}s)")
+                    print(f"[{self.name}] SENSOR: False trigger (pulse too long: {elapsed:.3f}s) - ignored")
 
     def _wait_for_coin_passage(self):
         """Wait for exactly one coin passage through the sensor."""
@@ -250,6 +283,12 @@ class ChangeDispenser:
                         signal_pin=config['signal_pin'],
                         enable_pin=config['enable_pin']
                     )
+                
+                # Disable sensors initially to reduce false triggers
+                print("Disabling hopper sensors to reduce false triggers...")
+                for name, hopper in self.hoppers.items():
+                    hopper.disable_sensor()
+                    
             except Exception as e:
                 print(f"CRITICAL: Failed to initialize pigpio or hoppers: {e}. Switching to simulation mode.")
                 self.simulated = True
@@ -374,7 +413,11 @@ class ChangeDispenser:
                 time.sleep(1.5) # Simulate dispense time
                 success = True
             else:
+                # Enable sensor for this hopper only when dispensing
+                self.hoppers['B'].enable_sensor()
                 success = self.hoppers['B'].dispense_single_coin()
+                # Disable sensor after dispensing to reduce false triggers
+                self.hoppers['B'].disable_sensor()
 
             if success:
                 actual_fives += 1
@@ -396,7 +439,11 @@ class ChangeDispenser:
                 time.sleep(1.5)
                 success = True
             else:
+                # Enable sensor for this hopper only when dispensing
+                self.hoppers['A'].enable_sensor()
                 success = self.hoppers['A'].dispense_single_coin()
+                # Disable sensor after dispensing to reduce false triggers
+                self.hoppers['A'].disable_sensor()
 
             if success:
                 actual_ones += 1
