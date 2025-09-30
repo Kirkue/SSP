@@ -448,6 +448,7 @@ class PrinterManager(QObject):
         
         # Check printer availability (basic check only)
         if not self.check_printer_availability():
+            print(f"🔍 DEBUG: Emitting print_job_failed signal from PrinterManager")
             self.print_job_failed.emit("Printer is not available. Please check printer connection.")
             return
         

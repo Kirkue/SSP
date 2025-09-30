@@ -201,6 +201,7 @@ class PrintingSystemApp(QMainWindow):
     def on_print_failed(self, error_message):
         """Called when the print job fails."""
         print(f"❌ Print job failed: {error_message}")
+        print(f"🔍 DEBUG: on_print_failed called in main_app.py")
         
         # Send SMS notification for ALL print failures
         print(f"Printing error - sending SMS notification: {error_message}")

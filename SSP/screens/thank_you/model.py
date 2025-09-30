@@ -136,6 +136,15 @@ class ThankYouModel(QObject):
             f"Error: {clean_message}\nPlease contact an administrator."
         )
         
+        # Send SMS notification for printing errors (backup method)
+        print(f"Thank you screen: Sending SMS notification for printing error: {message}")
+        try:
+            from managers.sms_manager import send_printing_error_sms
+            send_printing_error_sms(message)
+            print("Thank you screen: SMS notification sent successfully")
+        except Exception as sms_error:
+            print(f"Thank you screen: Failed to send SMS notification: {sms_error}")
+        
         # Emit signal to show admin override button for all printing errors
         print(f"Thank you screen: Emitting admin_override_requested for {self.error_type}")
         self.admin_override_requested.emit()
