@@ -477,17 +477,33 @@ class PrinterManager(QObject):
             if result.returncode != 0:
                 print("WARNING: 'lp' command not found. CUPS may not be installed.")
                 return False
+            
+            # Check if CUPS daemon is running
+            try:
+                result = subprocess.run(['pgrep', 'cupsd'], capture_output=True, text=True)
+                if result.returncode != 0:
+                    print("WARNING: CUPS daemon (cupsd) is not running")
+                    return False
+            except Exception as e:
+                print(f"WARNING: Error checking CUPS daemon: {e}")
+                return False
                 
             # Check if printer exists
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
                 print(f"WARNING: Printer '{self.printer_name}' not found.")
                 print("Available printers:")
                 subprocess.run(['lpstat', '-p'], capture_output=False)
                 return False
+            
+            # Check if printer is in a good state (not offline, jammed, etc.)
+            output = result.stdout.lower()
+            if 'offline' in output or 'stopped' in output or 'jam' in output:
+                print(f"WARNING: Printer '{self.printer_name}' is in error state: {output}")
+                return False
                 
-            print(f"Printer '{self.printer_name}' is available.")
+            print(f"Printer '{self.printer_name}' is available and ready.")
             return True
             
         except Exception as e:
