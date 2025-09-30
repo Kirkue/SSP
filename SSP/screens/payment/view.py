@@ -19,6 +19,7 @@ class PaymentScreenView(QWidget):
     back_button_clicked = pyqtSignal()
     payment_mode_toggle_clicked = pyqtSignal()  # Toggle between enable/disable
     payment_button_clicked = pyqtSignal()
+    # Inline suggestion now
     simulation_coin_clicked = pyqtSignal(int)  # coin_value
     simulation_bill_clicked = pyqtSignal(int)  # bill_value
     
@@ -61,6 +62,12 @@ class PaymentScreenView(QWidget):
             "background-color: transparent; border-radius: 5px; }"
         )
         main_layout.addWidget(self.total_label)
+
+        # Suggested payment directly under Total Amount Due
+        self.suggestion_label = QLabel("")
+        self.suggestion_label.setAlignment(Qt.AlignCenter)
+        self.suggestion_label.setStyleSheet("QLabel { color: #1e440a; font-size: 16px; font-weight: bold; padding: 2px 0; }")
+        main_layout.addWidget(self.suggestion_label)
 
         # Payment status label
         self.payment_status_label = QLabel("Click 'Enable Payment' to begin")
@@ -263,3 +270,8 @@ class PaymentScreenView(QWidget):
             "QPushButton { background-color: #ffc107; color: black; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; padding: 8px 12px; } "
             "QPushButton:hover { background-color: #e0a800; }"
         )
+    
+    # removed popup suggestions style
+
+    def update_inline_suggestion(self, text: str):
+        self.suggestion_label.setText(text or "")

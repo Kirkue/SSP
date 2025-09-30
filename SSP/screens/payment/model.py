@@ -1,8 +1,10 @@
 import os
 import time
 import threading
+from typing import Tuple, List, Dict
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from managers.hopper_manager import ChangeDispenser, DispenseThread, PIGPIO_AVAILABLE as HOPPER_GPIO_AVAILABLE
+from managers.payment_algorithm_manager import PaymentAlgorithmManager
 from database.db_manager import DatabaseManager
 
 try:
@@ -148,6 +150,7 @@ class PaymentModel(QObject):
     # Signals for UI updates
     payment_data_updated = pyqtSignal(dict)  # payment_data
     payment_status_updated = pyqtSignal(str)  # status_message
+    suggestion_updated = pyqtSignal(str)      # inline best payment suggestion
     amount_received_updated = pyqtSignal(float)  # amount_received
     change_updated = pyqtSignal(float, str)  # change_amount, change_text
     payment_completed = pyqtSignal(dict)  # payment_info
@@ -158,6 +161,7 @@ class PaymentModel(QObject):
     def __init__(self, main_app=None):
         super().__init__()
         self.db_manager = DatabaseManager()
+        self.payment_algorithm = PaymentAlgorithmManager(self.db_manager)
         self.main_app = main_app
         self.total_cost = 0
         self.amount_received = 0
@@ -168,6 +172,7 @@ class PaymentModel(QObject):
         self.gpio_thread = None
         self.dispense_thread = None
         self.change_dispenser = ChangeDispenser()
+        self.best_payment_suggestion = None  # {'amount', 'change', 'reason'}
         
     def set_payment_data(self, payment_data):
         """Sets the payment data and initializes payment state."""
@@ -188,6 +193,15 @@ class PaymentModel(QObject):
             self.color_mode = payment_data['color_mode']
         
         print(f"DEBUG: Print attributes set - file: {self.print_file_path}, pages: {self.selected_pages}, copies: {self.copies}, mode: {self.color_mode}")
+
+        # Compute best payment suggestion inline based on current coin inventory
+        try:
+            best = self.payment_algorithm.find_best_payment_amount(self.total_cost)
+            self.best_payment_suggestion = best
+            # Notify UI to show suggestion inline
+            self.suggestion_updated.emit(self._format_best_payment_status())
+        except Exception as e:
+            print(f"Error computing best payment suggestion: {e}")
         
         # Prepare summary data for UI
         analysis = payment_data.get('analysis', {})
@@ -288,11 +302,64 @@ class PaymentModel(QObject):
             change_text = f"Remaining: ₱{remaining:.2f}"
             self.change_updated.emit(0, change_text)
             self.payment_button_enabled.emit(False)  # Disable payment button when insufficient payment
+
+        # Refresh inline suggestion each time status updates
+        try:
+            best = self.payment_algorithm.find_best_payment_amount(self.total_cost)
+            self.best_payment_suggestion = best
+            self.suggestion_updated.emit(self._format_best_payment_status())
+        except Exception as e:
+            print(f"Error refreshing best payment suggestion: {e}")
+
+    def _format_best_payment_status(self) -> str:
+        if not self.best_payment_suggestion:
+            return ""
+        amt = self.best_payment_suggestion.get('amount', self.total_cost)
+        chg = self.best_payment_suggestion.get('change', 0)
+        if chg == 0:
+            return f"Max payment we can receive: ₱{amt:.2f} (exact)"
+        return f"Max payment we can receive: ₱{amt:.2f} (available ₱{chg:.2f})"
+    
+    def _check_payment_capabilities(self):
+        """Check payment capabilities and emit suggestions to UI."""
+        try:
+            # Get payment suggestions
+            suggestions = self.payment_algorithm.find_optimal_payment_amounts(self.total_cost)
+            status_message = self.payment_algorithm.get_payment_status_message(self.total_cost)
+            
+            # Emit payment suggestions to UI
+            self.payment_status_updated.emit(status_message)
+            
+            # Store suggestions for UI to display
+            self.payment_suggestions = suggestions
+            
+            print(f"Payment capabilities checked. Status: {status_message}")
+            print(f"Found {len(suggestions)} payment suggestions")
+            
+        except Exception as e:
+            print(f"Error checking payment capabilities: {e}")
+            self.payment_status_updated.emit("Error checking payment capabilities")
+    
+    def validate_payment_amount(self, payment_amount: float) -> Tuple[bool, str]:
+        """Validate if a payment amount can be processed."""
+        return self.payment_algorithm.validate_payment(self.total_cost, payment_amount)
+    
+    def get_payment_suggestions(self) -> List[Dict]:
+        """Get payment suggestions for the current total cost."""
+        return self.payment_algorithm.find_optimal_payment_amounts(self.total_cost)
     
     def complete_payment(self, main_app):
         """Completes the payment process."""
         if self.amount_received < self.total_cost:
             return False, "Payment is not sufficient."
+        
+        # Validate payment with algorithm
+        is_valid, message, payment_info = self.payment_algorithm.validate_payment(
+            self.total_cost, self.amount_received
+        )
+        
+        if not is_valid:
+            return False, f"Payment cannot be processed: {message}"
         
         # Check paper availability
         total_pages = len(self.payment_data['selected_pages']) * self.payment_data['copies']

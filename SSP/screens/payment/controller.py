@@ -17,6 +17,8 @@ class PaymentController(QWidget):
         self.model = PaymentModel(main_app)
         self.view = PaymentScreenView()
         
+        # Inline suggestion only (no popup controller)
+        
         # Set the view's layout as this controller's layout
         self.setLayout(self.view.main_layout)
         
@@ -28,6 +30,7 @@ class PaymentController(QWidget):
         self.view.back_button_clicked.connect(self.model.go_back)
         self.view.payment_mode_toggle_clicked.connect(self._toggle_payment_mode)
         self.view.payment_button_clicked.connect(self._complete_payment)
+        # popup removed
         self.view.simulation_coin_clicked.connect(self.model.simulate_coin)
         self.view.simulation_bill_clicked.connect(self.model.simulate_bill)
         
@@ -36,6 +39,7 @@ class PaymentController(QWidget):
         self.model.payment_status_updated.connect(self.view.update_payment_status)
         self.model.amount_received_updated.connect(self.view.update_amount_received)
         self.model.change_updated.connect(self.view.update_change_display)
+        self.model.suggestion_updated.connect(self.view.update_inline_suggestion)
         self.model.payment_button_enabled.connect(self.view.set_payment_button_enabled)
         self.model.payment_mode_changed.connect(self.view.set_payment_mode_button_state)
         self.model.payment_completed.connect(self._handle_payment_completed)
@@ -87,3 +91,34 @@ class PaymentController(QWidget):
     def go_back(self):
         """Public method to go back to print options screen."""
         self.model.go_back()
+    
+    # popup removed
+    
+    def _on_suggestion_selected(self, amount):
+        """Handle when user selects a payment suggestion."""
+        try:
+            # Set the suggested amount in the model
+            self.model.amount_received = amount
+            self.model.amount_received_updated.emit(amount)
+            self.model._update_payment_status()
+            
+            print(f"Payment suggestion selected: ₱{amount:.2f}")
+            
+        except Exception as e:
+            print(f"Error handling suggestion selection: {e}")
+    
+    def _on_exact_payment_requested(self):
+        """Handle when user requests exact payment."""
+        try:
+            # Set exact amount
+            self.model.amount_received = self.model.total_cost
+            self.model.amount_received_updated.emit(self.model.total_cost)
+            self.model._update_payment_status()
+            
+            print(f"Exact payment requested: ₱{self.model.total_cost:.2f}")
+            
+        except Exception as e:
+            print(f"Error handling exact payment request: {e}")
+
+    # When model recomputes the best suggestion, reflect it in the view via existing status signal
+    # PaymentModel already emits payment_status_updated; hook that to update label too
