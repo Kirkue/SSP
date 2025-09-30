@@ -60,6 +60,7 @@ class PrinterThread(QThread):
             print(f"Copies: {self.copies}")
 
             # Step 3: Execute the command and wait for it to complete
+            print(f"DEBUG: About to execute CUPS command: {' '.join(command)}")
             process = subprocess.run(
                 command, 
                 capture_output=True, 
@@ -67,9 +68,19 @@ class PrinterThread(QThread):
                 check=True,  # Raises CalledProcessError on non-zero exit codes
                 timeout=config.printer_timeout  # Use config timeout
             )
+            
+            print(f"DEBUG: CUPS command executed successfully")
+            print(f"DEBUG: CUPS stdout: {process.stdout}")
+            print(f"DEBUG: CUPS stderr: {process.stderr}")
 
-            # Step 4: Check the result and wait for print job completion
+            # Step 4: Validate the print job was actually sent
             print(f"Print job sent to CUPS successfully. stdout: {process.stdout}")
+            
+            # Check if the print job was actually accepted by CUPS
+            if not process.stdout or "request id is" not in process.stdout:
+                print("ERROR: CUPS did not return a job ID - print job may have failed")
+                self.print_failed.emit("Print job was not accepted by CUPS. Check printer connection.")
+                return
             
             # Extract job ID from the output (format: "request id is HP_Smart_Tank_580_590_series_5E0E1D_USB-1 (1 file(s))")
             job_id = None
@@ -85,10 +96,16 @@ class PrinterThread(QThread):
                         print(f"Print job ID extracted: '{job_id}'")
                     else:
                         print("Could not find job ID in output")
+                        self.print_failed.emit("Could not extract print job ID from CUPS response.")
+                        return
                 except Exception as e:
                     print(f"Error extracting job ID: {e}")
+                    self.print_failed.emit(f"Error processing CUPS response: {e}")
+                    return
             else:
                 print("No 'request id is' found in CUPS output")
+                self.print_failed.emit("CUPS did not return a valid job ID.")
+                return
             
             # Wait for the print job to actually complete
             if job_id:
@@ -114,10 +131,13 @@ class PrinterThread(QThread):
             except Exception as e:
                 print(f"DEBUG: Ink analysis failed: {e}")
                 print("DEBUG: Continuing despite ink analysis failure...")
-                # If ink analysis fails, emit success immediately
-                print("DEBUG: Emitting print_success signal due to ink analysis failure...")
-                self.print_success.emit()
-                print("DEBUG: print_success signal emitted")
+                # Only emit success if we actually completed a print job
+                if job_id or completion_success:
+                    print("DEBUG: Emitting print_success signal - print job was completed")
+                    self.print_success.emit()
+                    print("DEBUG: print_success signal emitted")
+                else:
+                    print("DEBUG: No print job was actually completed, not emitting success")
 
         except subprocess.TimeoutExpired:
             error_message = "Printing command timed out."
