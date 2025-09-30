@@ -49,20 +49,53 @@ class HopperController:
         self.coin_passage_count = 0
         self.sensor_active = False
         self.last_sensor_change = 0
+        self.callback = None
 
-        if PIGPIO_AVAILABLE and self.pi.connected:
-            # Setup GPIO exactly like working code
-            self.pi.set_mode(self.signal_pin, pigpio.INPUT)
-            self.pi.set_pull_up_down(self.signal_pin, pigpio.PUD_UP)
-            self.pi.set_mode(self.enable_pin, pigpio.OUTPUT)
-            
-            # Monitor both rising and falling edges to track coin passage
-            self.callback = self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE, self._sensor_callback)
-            
-            # Start with hopper disabled
-            self._disable_hopper()
+        if PIGPIO_AVAILABLE and self.pi and self.pi.connected:
+            try:
+                # Clean up any existing callbacks on this pin first
+                self._cleanup_callbacks()
+                
+                # Setup GPIO exactly like working code
+                self.pi.set_mode(self.signal_pin, pigpio.INPUT)
+                self.pi.set_pull_up_down(self.signal_pin, pigpio.PUD_UP)
+                self.pi.set_mode(self.enable_pin, pigpio.OUTPUT)
+                
+                # Monitor both rising and falling edges to track coin passage
+                self.callback = self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE, self._sensor_callback)
+                
+                # Start with hopper disabled
+                self._disable_hopper()
+                print(f"[{self.name}] GPIO setup completed successfully")
+            except Exception as e:
+                print(f"[{self.name}] ERROR: Failed to setup GPIO: {e}")
+                self.callback = None
         else:
+            print(f"[{self.name}] WARNING: pigpio not available or not connected")
             self.callback = None
+
+    def _cleanup_callbacks(self):
+        """Clean up any existing callbacks on this pin."""
+        try:
+            if self.pi and self.pi.connected:
+                # Cancel any existing callbacks on this pin
+                self.pi.callback(self.signal_pin, pigpio.EITHER_EDGE)
+                print(f"[{self.name}] Cleaned up existing callbacks on pin {self.signal_pin}")
+        except Exception as e:
+            print(f"[{self.name}] Warning: Error cleaning up callbacks: {e}")
+
+    def cleanup(self):
+        """Clean up GPIO resources."""
+        try:
+            if self.callback:
+                self.callback.cancel()
+                self.callback = None
+                print(f"[{self.name}] Callback cleaned up")
+            if self.pi and self.pi.connected:
+                self._disable_hopper()
+                print(f"[{self.name}] Hopper disabled during cleanup")
+        except Exception as e:
+            print(f"[{self.name}] Error during cleanup: {e}")
 
     def _enable_hopper(self):
         if not self.pi or not self.pi.connected:
@@ -229,14 +262,24 @@ class ChangeDispenser:
         if not self.pi or not self.pi.connected:
             print("pigpio connection lost, attempting to reconnect...")
             try:
+                # Clean up existing connection
                 if self.pi:
+                    self.cleanup_all_hoppers()
                     self.pi.stop()
+                
+                # Create new connection
                 self.pi = pigpio.pi()
                 if self.pi.connected:
                     print("pigpio connection restored")
-                    # Update all hopper controllers with new pi instance
-                    for name, hopper in self.hoppers.items():
-                        hopper.pi = self.pi
+                    # Recreate all hopper controllers with new pi instance
+                    for name, config in HOPPER_CONFIGS.items():
+                        print(f"Reinitializing Hopper '{name}' with new pigpio connection")
+                        self.hoppers[name] = HopperController(
+                            pi_instance=self.pi,
+                            name=name,
+                            signal_pin=config['signal_pin'],
+                            enable_pin=config['enable_pin']
+                        )
                     return True
                 else:
                     print("Failed to restore pigpio connection")
@@ -245,6 +288,47 @@ class ChangeDispenser:
                 print(f"Error reconnecting to pigpio: {e}")
                 return False
         return True
+
+    def cleanup_all_hoppers(self):
+        """Clean up all hopper resources."""
+        for name, hopper in self.hoppers.items():
+            try:
+                hopper.cleanup()
+                print(f"Cleaned up hopper {name}")
+            except Exception as e:
+                print(f"Error cleaning up hopper {name}: {e}")
+
+    def __del__(self):
+        """Destructor to ensure cleanup."""
+        try:
+            self.cleanup_all_hoppers()
+            if self.pi:
+                self.pi.stop()
+        except Exception as e:
+            print(f"Error in destructor: {e}")
+
+    def reinitialize_hoppers(self):
+        """Reinitialize all hoppers with current pigpio connection."""
+        if self.simulated or not self.pi or not self.pi.connected:
+            return False
+        
+        try:
+            # Clean up existing hoppers
+            self.cleanup_all_hoppers()
+            
+            # Recreate all hopper controllers
+            for name, config in HOPPER_CONFIGS.items():
+                print(f"Reinitializing Hopper '{name}' on Signal={config['signal_pin']}, Enable={config['enable_pin']}")
+                self.hoppers[name] = HopperController(
+                    pi_instance=self.pi,
+                    name=name,
+                    signal_pin=config['signal_pin'],
+                    enable_pin=config['enable_pin']
+                )
+            return True
+        except Exception as e:
+            print(f"Error reinitializing hoppers: {e}")
+            return False
 
     def dispense_change(self, amount: float, status_callback=None, admin_screen=None, database_thread_manager=None):
         """Calculates and dispenses the correct change, one coin at a time. Returns actual coins dispensed."""
@@ -258,6 +342,16 @@ class ChangeDispenser:
             if status_callback:
                 status_callback(error_msg)
             return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'pigpio_connection_failed'}
+        
+        # Reinitialize hoppers if needed
+        if not self.hoppers or not all(hasattr(hopper, 'callback') and hopper.callback for hopper in self.hoppers.values()):
+            print("Hoppers not properly initialized, reinitializing...")
+            if not self.reinitialize_hoppers():
+                error_msg = "CRITICAL: Failed to reinitialize hoppers. Cannot dispense change."
+                print(error_msg)
+                if status_callback:
+                    status_callback(error_msg)
+                return {'success': False, 'coins_1': 0, 'coins_5': 0, 'error': 'hopper_initialization_failed'}
 
         num_fives = int(amount // 5)
         num_ones = int(round(amount % 5))
