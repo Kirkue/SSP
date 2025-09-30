@@ -6,7 +6,7 @@ import threading
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from config import get_config
 from managers.ink_analysis_manager import InkAnalysisManager
-from managers.sms_manager import send_paper_jam_sms
+from managers.sms_manager import send_paper_jam_sms, send_printing_error_sms
 
 try:
     import fitz  # PyMuPDF
@@ -120,15 +120,42 @@ class PrinterThread(QThread):
                 print("DEBUG: print_success signal emitted")
 
         except subprocess.TimeoutExpired:
-            self.print_failed.emit("Printing command timed out.")
+            error_message = "Printing command timed out."
+            print(f"Printing error - sending SMS notification: {error_message}")
+            try:
+                send_printing_error_sms(error_message)
+                print("SMS notification sent for printing timeout")
+            except Exception as sms_error:
+                print(f"Failed to send SMS notification: {sms_error}")
+            self.print_failed.emit(error_message)
         except FileNotFoundError:
-            self.print_failed.emit("The 'lp' command was not found. Is CUPS installed?")
+            error_message = "The 'lp' command was not found. Is CUPS installed?"
+            print(f"Printing error - sending SMS notification: {error_message}")
+            try:
+                send_printing_error_sms(error_message)
+                print("SMS notification sent for missing lp command")
+            except Exception as sms_error:
+                print(f"Failed to send SMS notification: {sms_error}")
+            self.print_failed.emit(error_message)
         except subprocess.CalledProcessError as e:
             error_message = f"CUPS Error: {e.stderr.strip()}"
+            print(f"Printing error - sending SMS notification: {error_message}")
+            try:
+                send_printing_error_sms(error_message)
+                print("SMS notification sent for CUPS error")
+            except Exception as sms_error:
+                print(f"Failed to send SMS notification: {sms_error}")
             print(error_message)
             self.print_failed.emit(error_message)
         except Exception as e:
-            self.print_failed.emit(f"An unexpected error occurred: {str(e)}")
+            error_message = f"An unexpected error occurred: {str(e)}"
+            print(f"Printing error - sending SMS notification: {error_message}")
+            try:
+                send_printing_error_sms(error_message)
+                print("SMS notification sent for unexpected error")
+            except Exception as sms_error:
+                print(f"Failed to send SMS notification: {sms_error}")
+            self.print_failed.emit(error_message)
         finally:
             # Step 5: Clean up the temporary file
             self.cleanup_temp_pdf()
@@ -406,10 +433,24 @@ class PrinterManager(QObject):
             self.print_job_failed.emit(f"Paper jam detected: {printer_status['message']}")
             return
         elif printer_status['status'] == 'offline':
-            self.print_job_failed.emit(f"Printer offline: {printer_status['message']}")
+            error_message = f"Printer offline: {printer_status['message']}"
+            print(f"Printer error - sending SMS notification: {error_message}")
+            try:
+                send_printing_error_sms(error_message)
+                print("SMS notification sent for printer offline")
+            except Exception as e:
+                print(f"Failed to send SMS notification: {e}")
+            self.print_job_failed.emit(error_message)
             return
         elif printer_status['status'] == 'error':
-            self.print_job_failed.emit(f"Printer error: {printer_status['message']}")
+            error_message = f"Printer error: {printer_status['message']}"
+            print(f"Printer error - sending SMS notification: {error_message}")
+            try:
+                send_printing_error_sms(error_message)
+                print("SMS notification sent for printer error")
+            except Exception as e:
+                print(f"Failed to send SMS notification: {e}")
+            self.print_job_failed.emit(error_message)
             return
         
         # Check if file exists

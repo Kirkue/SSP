@@ -1,5 +1,5 @@
 import os
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QStackedLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QStackedLayout, QHBoxLayout
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 
@@ -12,6 +12,7 @@ class ThankYouScreenView(QWidget):
     
     # Signals for user interactions
     finish_button_clicked = pyqtSignal()
+    admin_override_clicked = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -51,11 +52,26 @@ class ThankYouScreenView(QWidget):
         self.finish_button.clicked.connect(self.finish_button_clicked.emit)
         self.finish_button.hide()  # Hide the button, printing is now automatic
 
+        # --- Admin Override Button (Hidden by default, shown for errors) ---
+        self.admin_override_button = QPushButton("Admin Override")
+        self.admin_override_button.setMinimumHeight(50)
+        self.admin_override_button.setMaximumWidth(200)
+        self.admin_override_button.setStyleSheet(self.get_admin_button_style())
+        self.admin_override_button.clicked.connect(self.admin_override_clicked.emit)
+        self.admin_override_button.hide()  # Hidden by default
+
+        # --- Button Layout for Admin Override ---
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.admin_override_button)
+        button_layout.addStretch()
+
         main_layout.addStretch(1)
         main_layout.addWidget(self.status_label)
         main_layout.addWidget(self.subtitle_label)
         main_layout.addSpacing(40)
         main_layout.addWidget(self.finish_button, 0, Qt.AlignHCenter)
+        main_layout.addLayout(button_layout)
         main_layout.addStretch(1)
 
         stacked_layout.addWidget(self.background_label)
@@ -82,6 +98,14 @@ class ThankYouScreenView(QWidget):
         self.status_label.setStyleSheet(status_style)
         self.subtitle_label.setText(subtitle_text)
     
+    def show_admin_override_button(self):
+        """Shows the admin override button."""
+        self.admin_override_button.show()
+    
+    def hide_admin_override_button(self):
+        """Hides the admin override button."""
+        self.admin_override_button.hide()
+    
     def get_finish_button_style(self):
         """Returns the style for the finish button."""
         return """
@@ -90,4 +114,20 @@ class ThankYouScreenView(QWidget):
                 font-weight: bold; border: none; border-radius: 8px; 
             }
             QPushButton:hover { background-color: #2a5d1a; }
+        """
+    
+    def get_admin_button_style(self):
+        """Returns the style for the admin override button."""
+        return """
+            QPushButton { 
+                background-color: #8B0000; color: white; font-size: 16px;
+                font-weight: bold; border: 2px solid #A52A2A; border-radius: 8px; 
+            }
+            QPushButton:hover { 
+                background-color: #A52A2A; 
+                border-color: #DC143C;
+            }
+            QPushButton:pressed { 
+                background-color: #DC143C; 
+            }
         """

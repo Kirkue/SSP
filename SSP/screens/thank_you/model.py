@@ -9,6 +9,7 @@ class ThankYouModel(QObject):
     # Signals for UI updates
     status_updated = pyqtSignal(str, str)  # status_text, subtitle_text
     redirect_to_idle = pyqtSignal()
+    admin_override_requested = pyqtSignal()  # request to show admin override button
     
     def __init__(self):
         super().__init__()
@@ -127,8 +128,21 @@ class ThankYouModel(QObject):
             f"Error: {clean_message}\nPlease contact an administrator."
         )
         
-        # Start a longer timer to allow the user to read the error
-        self.redirect_timer.start(15000)
+        # Show admin override button and don't auto-redirect
+        self.admin_override_requested.emit()
+        
+        # Don't start automatic redirect timer for errors - wait for admin override
+    
+    def handle_admin_override(self):
+        """Handles admin override - allows going back to idle screen."""
+        print("Thank you screen: Admin override requested")
+        self.current_state = "admin_override"
+        self.status_updated.emit(
+            "ADMIN OVERRIDE",
+            "Returning to idle screen..."
+        )
+        # Start a short timer to show the message before redirecting
+        self.redirect_timer.start(2000)
     
     def _on_print_success(self):
         """Handles successful print completion."""

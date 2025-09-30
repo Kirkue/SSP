@@ -121,6 +121,11 @@ class SMSManager(QObject):
         message = "Printer jam"
         return self.send_sms(message)
     
+    def send_printing_error_alert(self, error_message):
+        """Send printing error alert SMS."""
+        message = f"Printing error: {error_message}"
+        return self.send_sms(message)
+    
     def send_custom_alert(self, message):
         """Send custom alert SMS."""
         return self.send_sms(message)
@@ -156,6 +161,11 @@ def send_paper_jam_sms():
     """Send paper jam SMS alert."""
     manager = get_sms_manager()
     return manager.send_paper_jam_alert()
+
+def send_printing_error_sms(error_message):
+    """Send printing error SMS alert."""
+    manager = get_sms_manager()
+    return manager.send_printing_error_alert(error_message)
 
 def cleanup_sms():
     """Clean up SMS resources."""
