@@ -189,14 +189,16 @@ class PrinterThread(QThread):
             self.temp_pdf_path = None
 
     def wait_for_print_completion(self, job_id):
-        """Wait for the print job to actually complete."""
+        """Wait for the print job to actually complete with enhanced monitoring."""
         import time
         
         print(f"Waiting for print job {job_id} to complete...")
         config = get_config()
         max_wait_time = config.printer_timeout * 10  # 10x timeout for completion wait
-        check_interval = 5   # Check every 5 seconds
+        check_interval = 3   # Check every 3 seconds for more responsive monitoring
         elapsed_time = 0
+        consecutive_idle_checks = 0
+        required_idle_checks = 2  # Require 2 consecutive idle checks to confirm completion
         
         while elapsed_time < max_wait_time:
             try:
@@ -207,10 +209,25 @@ class PrinterThread(QThread):
                 print(f"lpstat result for {job_id}: returncode={result.returncode}, stdout='{result.stdout.strip()}'")
                 
                 if result.returncode != 0 or not result.stdout.strip():
-                    # Job is no longer in the queue, it's completed
-                    print(f"Print job {job_id} completed after {elapsed_time} seconds")
-                    return True
+                    # Job is no longer in the queue, now verify printer is idle
+                    print(f"Print job {job_id} no longer in queue, verifying printer is idle...")
+                    
+                    # Check printer status to ensure it's truly idle
+                    printer_status = self._check_printer_status()
+                    if printer_status['status'] == 'ready':
+                        consecutive_idle_checks += 1
+                        print(f"Printer is idle (check {consecutive_idle_checks}/{required_idle_checks})")
+                        
+                        if consecutive_idle_checks >= required_idle_checks:
+                            print(f"Print job {job_id} completed and printer confirmed idle after {elapsed_time} seconds")
+                            return True
+                    else:
+                        print(f"Printer not idle yet: {printer_status['status']} - {printer_status['message']}")
+                        consecutive_idle_checks = 0  # Reset counter if not idle
                 else:
+                    # Job still in queue, check for errors
+                    print(f"Print job {job_id} still in queue... ({elapsed_time}s elapsed)")
+                    
                     # Check for paper jam during printing
                     printer_status = self._check_printer_status()
                     if printer_status['status'] == 'paper_jam':
@@ -230,10 +247,15 @@ class PrinterThread(QThread):
                         print(f"Printer went offline during printing: {printer_status['message']}")
                         self.print_failed.emit(f"Printer offline: {printer_status['message']}")
                         return False
+                    elif printer_status['status'] == 'error':
+                        print(f"Printer error during printing: {printer_status['message']}")
+                        self.print_failed.emit(f"Printer error: {printer_status['message']}")
+                        return False
                     
-                    print(f"Print job {job_id} still printing... ({elapsed_time}s elapsed)")
-                    time.sleep(check_interval)
-                    elapsed_time += check_interval
+                    consecutive_idle_checks = 0  # Reset counter while job is still active
+                    
+                time.sleep(check_interval)
+                elapsed_time += check_interval
                     
             except Exception as e:
                 print(f"Error checking print job status: {e}")
