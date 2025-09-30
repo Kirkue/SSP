@@ -201,6 +201,16 @@ class PrintingSystemApp(QMainWindow):
     def on_print_failed(self, error_message):
         """Called when the print job fails."""
         print(f"❌ Print job failed: {error_message}")
+        
+        # Send SMS notification for ALL print failures
+        print(f"Printing error - sending SMS notification: {error_message}")
+        try:
+            from managers.sms_manager import send_printing_error_sms
+            send_printing_error_sms(error_message)
+            print("SMS notification sent for print failure")
+        except Exception as sms_error:
+            print(f"Failed to send SMS notification: {sms_error}")
+        
         # Tell the thank you screen to show an error message
         if self.stacked_widget.currentWidget() == self.thank_you_screen:
             # Check if this is a paper jam error
