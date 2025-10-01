@@ -2,13 +2,16 @@
 Printer Manager Module
 
 Manages print job execution via CUPS (Common Unix Printing System) in background threads.
-Handles PDF page selection, print queue monitoring, error detection (including paper jams),
-and integrates with ink analysis for tracking consumables.
+Handles PDF page selection, print queue monitoring, and error detection (paper jams, 
+offline status, etc.).
 
 Key Components:
 - PrinterThread: Background thread for executing print jobs
 - PrinterManager: Coordinates print jobs and manages printer availability
 - Status Monitoring: Active monitoring for paper jams, offline status, and errors
+
+Note: Ink analysis is handled separately by the main application after print completion.
+This keeps printing concerns separate from ink consumption tracking.
 """
 
 import os
@@ -35,20 +38,19 @@ class PrinterThread(QThread):
     1. Creates temporary PDF with selected pages
     2. Sends print job to CUPS
     3. Monitors print queue and printer status
-    4. Triggers ink analysis after successful printing
-    5. Cleans up temporary files
+    4. Cleans up temporary files
     
     Signals:
-        print_success: Emitted when print job completes successfully
+        print_success(str): Emitted with temp_pdf_path when print completes successfully
         print_failed(str): Emitted with error message when print job fails
         print_waiting: Emitted when job is sent and waiting for completion
     """
     
-    print_success = pyqtSignal()
+    print_success = pyqtSignal(str)  # Emits temp_pdf_path for ink analysis
     print_failed = pyqtSignal(str)
     print_waiting = pyqtSignal()
 
-    def __init__(self, file_path, copies, color_mode, selected_pages, printer_name, ink_analysis_thread_manager=None):
+    def __init__(self, file_path, copies, color_mode, selected_pages, printer_name):
         """
         Initialize print thread.
         
@@ -58,7 +60,6 @@ class PrinterThread(QThread):
             color_mode: 'Color' or 'Black and White'
             selected_pages: List of page numbers to print
             printer_name: CUPS printer name
-            ink_analysis_thread_manager: Manager for ink usage analysis (optional)
         """
         super().__init__()
         self.file_path = file_path
@@ -67,7 +68,6 @@ class PrinterThread(QThread):
         self.selected_pages = sorted(selected_pages)
         self.printer_name = printer_name
         self.temp_pdf_path = None
-        self.ink_analysis_thread_manager = ink_analysis_thread_manager
 
     def run(self):
         """Execute the complete print workflow."""
@@ -111,11 +111,12 @@ class PrinterThread(QThread):
             if not completion_success:
                 return
             
-            # Analyze ink usage and update database
-            self._analyze_and_update_ink_usage()
+            # Mark as succeeded so temp PDF isn't cleaned up in finally block
+            self._print_succeeded = True
             
-            # Emit success signal
-            self.print_success.emit()
+            # Emit success signal with temp PDF path for ink analysis
+            # Main app will clean up temp PDF after ink analysis completes
+            self.print_success.emit(self.temp_pdf_path)
 
         except subprocess.TimeoutExpired:
             self._handle_print_error("Printing command timed out.")
@@ -126,7 +127,10 @@ class PrinterThread(QThread):
         except Exception as e:
             self._handle_print_error(f"An unexpected error occurred: {str(e)}")
         finally:
-            self.cleanup_temp_pdf()
+            # Only clean up temp PDF if print failed
+            # On success, main app will clean it up after ink analysis
+            if not hasattr(self, '_print_succeeded'):
+                self.cleanup_temp_pdf()
 
     def _extract_job_id(self, cups_output):
         """
@@ -290,42 +294,6 @@ class PrinterThread(QThread):
         
         return command
 
-    def _analyze_and_update_ink_usage(self):
-        """
-        Queue ink usage analysis for the printed pages.
-        
-        Analysis is performed in a dedicated thread to avoid blocking.
-        Results are used to update CMYK ink levels in the database.
-        """
-        if not self.ink_analysis_thread_manager:
-            return
-        
-        try:
-            self.ink_analysis_thread_manager.analyze_and_update(
-                pdf_path=self.file_path,
-                selected_pages=self.selected_pages,
-                copies=self.copies,
-                dpi=150,
-                color_mode=self.color_mode,
-                callback=self._on_ink_analysis_completed
-            )
-        except Exception as e:
-            print(f"⚠️ Error queueing ink analysis: {e}")
-    
-    def _on_ink_analysis_completed(self, operation):
-        """
-        Callback invoked when ink analysis completes.
-        
-        Args:
-            operation: InkAnalysisOperation object with result or error
-        """
-        if operation.error:
-            print(f"⚠️ Ink analysis failed: {operation.error}")
-        else:
-            result = operation.result
-            if result.get('success', False):
-                if result.get('database_updated', False):
-                    print("Ink levels updated in database")
 
     def _check_printer_status(self):
         """
@@ -410,24 +378,22 @@ class PrinterManager(QObject):
         print_job_successful: Emitted when a print job completes successfully
         print_job_failed(str): Emitted with error message when a print job fails
         print_job_waiting: Emitted when job is sent and waiting for completion
+    
+    Note:
+        After print_job_successful, the temporary PDF is kept alive for ink analysis.
+        Call cleanup_last_temp_pdf() after ink analysis completes to remove it.
     """
     
     print_job_successful = pyqtSignal()
     print_job_failed = pyqtSignal(str)
     print_job_waiting = pyqtSignal()
 
-    def __init__(self, ink_analysis_thread_manager=None):
-        """
-        Initialize printer manager.
-        
-        Args:
-            ink_analysis_thread_manager: Manager for ink analysis (optional)
-        """
+    def __init__(self):
+        """Initialize printer manager."""
         super().__init__()
         config = get_config()
         self.printer_name = config.printer_name
         self.print_thread = None
-        self.ink_analysis_thread_manager = ink_analysis_thread_manager
         self.check_printer_availability()
 
     def print_file(self, file_path, copies, color_mode, selected_pages):
@@ -463,10 +429,9 @@ class PrinterManager(QObject):
             copies=copies,
             color_mode=color_mode,
             selected_pages=selected_pages,
-            printer_name=self.printer_name,
-            ink_analysis_thread_manager=self.ink_analysis_thread_manager
+            printer_name=self.printer_name
         )
-        self.print_thread.print_success.connect(self.print_job_successful.emit)
+        self.print_thread.print_success.connect(self._on_print_success)
         self.print_thread.print_failed.connect(self.print_job_failed.emit)
         self.print_thread.print_waiting.connect(self.print_job_waiting.emit)
         self.print_thread.finished.connect(self.on_thread_finished)
@@ -589,6 +554,33 @@ class PrinterManager(QObject):
         status = self.check_printer_status()
         return status['status'] == 'paper_jam'
 
+    def _on_print_success(self, temp_pdf_path):
+        """
+        Handle print success and forward temp PDF path.
+        
+        Args:
+            temp_pdf_path: Path to temporary PDF file (needs to be kept for ink analysis)
+        """
+        # Store temp PDF path so main app can clean it up after ink analysis
+        self.last_temp_pdf_path = temp_pdf_path
+        self.print_job_successful.emit()
+    
+    def cleanup_last_temp_pdf(self):
+        """
+        Clean up the last temporary PDF file after ink analysis completes.
+        
+        This should be called by the main app after ink analysis finishes.
+        """
+        if hasattr(self, 'last_temp_pdf_path') and self.last_temp_pdf_path:
+            try:
+                import os
+                if os.path.exists(self.last_temp_pdf_path):
+                    os.remove(self.last_temp_pdf_path)
+                    print(f"Cleaned up temp PDF: {self.last_temp_pdf_path}")
+                self.last_temp_pdf_path = None
+            except Exception as e:
+                print(f"⚠️ Error cleaning up temp PDF: {e}")
+    
     def on_thread_finished(self):
         """Handle print thread completion."""
         self.print_thread = None

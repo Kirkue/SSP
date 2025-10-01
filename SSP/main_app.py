@@ -92,8 +92,8 @@ class PrintingSystemApp(QMainWindow):
         # Connect thread managers for real-time data updates
         self._connect_thread_managers()
         
-        # Initialize printer manager with ink analysis integration
-        self.printer_manager = PrinterManager(self.ink_analysis_thread_manager)
+        # Initialize printer manager (no dependencies)
+        self.printer_manager = PrinterManager()
         
         # Initialize remaining screens that depend on other components
         self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
@@ -208,10 +208,13 @@ class PrintingSystemApp(QMainWindow):
         """
         Handle successful print job completion.
         
-        Updates the thank you screen to show completion status. If not currently
-        on the thank you screen, navigates to it first before updating status.
+        Triggers ink analysis and updates the thank you screen to show completion status.
+        If not currently on the thank you screen, navigates to it first.
         """
         print("✅ Print job successfully completed")
+        
+        # Trigger ink analysis for the printed job (if print job info available)
+        self._trigger_ink_analysis()
         
         current_screen = self.stacked_widget.currentWidget()
         
@@ -222,6 +225,60 @@ class PrintingSystemApp(QMainWindow):
             print(f"⚠️ Print completed on wrong screen ({type(current_screen).__name__}), navigating to thank you screen")
             self.show_screen('thank_you')
             QTimer.singleShot(100, lambda: self.thank_you_screen.finish_printing())
+    
+    def _trigger_ink_analysis(self):
+        """
+        Trigger ink usage analysis for the completed print job.
+        
+        Uses the temporary PDF created by the printer (which contains only
+        the selected pages that were actually printed). This ensures ink
+        analysis works even if the USB drive is removed.
+        
+        After analysis completes, the temporary PDF is cleaned up.
+        """
+        if not hasattr(self, 'current_print_job') or not self.current_print_job:
+            print("⚠️ No print job info available for ink analysis")
+            return
+        
+        # Get the temp PDF path from printer manager
+        if not hasattr(self.printer_manager, 'last_temp_pdf_path') or not self.printer_manager.last_temp_pdf_path:
+            print("⚠️ No temp PDF available for ink analysis")
+            return
+        
+        temp_pdf_path = self.printer_manager.last_temp_pdf_path
+        
+        try:
+            # Use temp PDF (already has only selected pages!) instead of original file
+            # This works even if USB drive is removed
+            self.ink_analysis_thread_manager.analyze_and_update(
+                pdf_path=temp_pdf_path,
+                selected_pages=None,  # All pages in temp PDF (already filtered)
+                copies=self.current_print_job['copies'],
+                dpi=150,
+                color_mode=self.current_print_job['color_mode'],
+                callback=self._on_ink_analysis_completed
+            )
+        except Exception as e:
+            print(f"⚠️ Error triggering ink analysis: {e}")
+            # Clean up temp PDF even if analysis fails
+            self.printer_manager.cleanup_last_temp_pdf()
+    
+    def _on_ink_analysis_completed(self, operation):
+        """
+        Handle ink analysis completion and clean up temporary PDF.
+        
+        Args:
+            operation: InkAnalysisOperation object with result or error
+        """
+        if operation.error:
+            print(f"⚠️ Ink analysis failed: {operation.error}")
+        else:
+            result = operation.result
+            if result.get('success', False) and result.get('database_updated', False):
+                print("✅ Ink levels updated in database")
+        
+        # Always clean up temp PDF after analysis completes
+        self.printer_manager.cleanup_last_temp_pdf()
 
     def on_print_waiting(self):
         """
@@ -316,7 +373,7 @@ def main():
         print("✅ Database initialization successful\n")
         
         # Create Qt application
-        app = QApplication(sys.argv)
+        app = QApplication(sys.argv) # Main thread init
         app.setApplicationName("Printing System GUI")
         app.setApplicationVersion("1.0")
         window = PrintingSystemApp()
