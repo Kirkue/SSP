@@ -1,6 +1,15 @@
-#!/usr/bin/env python3
 """
-Ink Analysis Thread Manager - Manages ink analysis operations in a dedicated thread.
+Ink Analysis Thread Manager
+
+Manages ink usage analysis operations in a dedicated thread with its own database connection.
+Analyzes printed pages to calculate CMYK ink consumption and updates the database with
+new ink levels.
+
+Key Features:
+- Thread-safe ink analysis operations
+- Independent database connection for thread safety
+- Queue-based operation management
+- Real-time CMYK level updates via signals
 """
 
 import threading
@@ -9,8 +18,19 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from managers.ink_analysis_manager import InkAnalysisManager
 from database.db_manager import DatabaseManager
 
+
 class InkAnalysisOperation:
-    """Represents an ink analysis operation to be executed."""
+    """
+    Represents an ink analysis operation to be executed.
+    
+    Attributes:
+        operation_type: Type of operation (currently only 'analyze_and_update')
+        data: Dictionary containing analysis parameters
+        callback: Optional callback function called when operation completes
+        result: Operation result dictionary (set after execution)
+        error: Error message if operation fails
+    """
+    
     def __init__(self, operation_type, data, callback=None):
         self.operation_type = operation_type
         self.data = data
@@ -18,16 +38,28 @@ class InkAnalysisOperation:
         self.result = None
         self.error = None
 
+
 class InkAnalysisThreadManager(QObject):
     """
-    Manages ink analysis operations in a dedicated thread with its own database connection.
+    Manages ink analysis operations in a dedicated thread.
+    
+    Creates its own database connection to avoid SQLite thread safety issues.
+    Analyzes PDF pages to calculate ink usage and updates CMYK levels in the database.
+    
+    Signals:
+        analysis_completed(dict): Emits analysis results with keys:
+            - success: Boolean indicating if analysis succeeded
+            - database_updated: Boolean indicating if database was updated
+            - cmyk_levels: Dictionary with updated C, M, Y, K percentages
+            - error: Error message if analysis failed
+        database_updated(bool): Emits database update success status
     """
     
-    # Signals
-    analysis_completed = pyqtSignal(dict)  # Emits analysis results
-    database_updated = pyqtSignal(bool)    # Emits database update success
+    analysis_completed = pyqtSignal(dict)
+    database_updated = pyqtSignal(bool)
     
     def __init__(self):
+        """Initialize the ink analysis thread manager."""
         super().__init__()
         self.operation_queue = queue.Queue()
         self.db_manager = None
@@ -36,28 +68,28 @@ class InkAnalysisThreadManager(QObject):
         self.running = False
         
     def start(self):
-        """Start the ink analysis thread."""
+        """Start the ink analysis worker thread."""
         if self.thread is None or not self.thread.is_alive():
             self.running = True
             self.thread = threading.Thread(target=self._ink_analysis_worker, daemon=True)
             self.thread.start()
-            print("Ink analysis thread manager started")
     
     def stop(self):
-        """Stop the ink analysis thread."""
+        """Stop the ink analysis worker thread."""
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1.0)
-        print("Ink analysis thread manager stopped")
     
     def _ink_analysis_worker(self):
-        """Worker method that runs in the dedicated ink analysis thread."""
-        print(f"Ink analysis worker started in thread: {threading.current_thread().name}")
+        """
+        Worker method that runs in the dedicated ink analysis thread.
         
-        # Create database manager and ink analysis manager in this thread
+        Creates database and ink analysis managers in this thread for thread safety.
+        Processes queued operations sequentially.
+        """
+        # Create managers in this thread
         self.db_manager = DatabaseManager()
         self.ink_analysis_manager = InkAnalysisManager(self.db_manager)
-        print(f"Database and ink analysis managers created in thread: {threading.current_thread().name}")
         
         while self.running:
             try:
@@ -67,23 +99,27 @@ class InkAnalysisThreadManager(QObject):
                 if operation.operation_type == "analyze_and_update":
                     self._handle_analyze_and_update(operation)
                 else:
-                    print(f"Unknown operation type: {operation.operation_type}")
                     operation.error = f"Unknown operation type: {operation.operation_type}"
                 
-                # Call callback if provided
+                # Execute callback if provided
                 if operation.callback:
                     operation.callback(operation)
                     
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Error in ink analysis worker: {e}")
+                print(f"❌ Error in ink analysis worker: {e}")
                 if operation and operation.callback:
                     operation.error = str(e)
                     operation.callback(operation)
     
     def _handle_analyze_and_update(self, operation):
-        """Handle analyze and update operation."""
+        """
+        Handle ink analysis and database update operation.
+        
+        Args:
+            operation: InkAnalysisOperation with PDF path and analysis parameters
+        """
         try:
             pdf_path = operation.data['pdf_path']
             selected_pages = operation.data.get('selected_pages')
@@ -91,10 +127,7 @@ class InkAnalysisThreadManager(QObject):
             dpi = operation.data.get('dpi', 150)
             color_mode = operation.data.get('color_mode', 'Color')
             
-            print(f"DEBUG: Ink analysis thread - Analyzing {pdf_path}")
-            print(f"DEBUG: Ink analysis thread - Pages: {selected_pages}, Copies: {copies}, Color Mode: {color_mode}")
-            
-            # Perform the analysis and update
+            # Perform analysis and update database
             result = self.ink_analysis_manager.analyze_and_update_after_print(
                 pdf_path=pdf_path,
                 selected_pages=selected_pages,
@@ -106,10 +139,11 @@ class InkAnalysisThreadManager(QObject):
             operation.result = result
             self.analysis_completed.emit(result)
             
+            # Emit database update status and updated CMYK levels
             if result.get('database_updated', False):
                 self.database_updated.emit(True)
-                print("DEBUG: Ink analysis thread - Database updated successfully")
-                # Get updated CMYK levels and emit them
+                
+                # Get and emit updated CMYK levels
                 updated_levels = self.db_manager.get_cmyk_ink_levels()
                 if updated_levels:
                     self.analysis_completed.emit({
@@ -119,15 +153,27 @@ class InkAnalysisThreadManager(QObject):
                     })
             else:
                 self.database_updated.emit(False)
-                print("DEBUG: Ink analysis thread - Database update failed")
                 
         except Exception as e:
             operation.error = str(e)
-            print(f"Error in ink analysis: {e}")
+            print(f"❌ Error in ink analysis: {e}")
             self.database_updated.emit(False)
     
     def analyze_and_update(self, pdf_path, selected_pages=None, copies=1, dpi=150, color_mode="Color", callback=None):
-        """Queue an analyze and update operation."""
+        """
+        Queue an ink analysis and database update operation.
+        
+        Args:
+            pdf_path: Path to PDF file that was printed
+            selected_pages: List of page numbers that were printed (None for all pages)
+            copies: Number of copies that were printed
+            dpi: DPI used for rendering pages during analysis
+            color_mode: 'Color' or 'Black and White'
+            callback: Optional callback function(operation) called when complete
+            
+        Returns:
+            InkAnalysisOperation object
+        """
         operation = InkAnalysisOperation("analyze_and_update", {
             'pdf_path': pdf_path,
             'selected_pages': selected_pages,

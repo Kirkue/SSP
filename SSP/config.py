@@ -1,35 +1,65 @@
 """
-Configuration loader for SSP (Self-Service Printer) application.
-Loads configuration from .env file. Application will exit if .env file is not found.
+Configuration Module for SSP (Self-Service Printer) Application
+
+Loads application configuration from a .env file and provides type-safe access
+to configuration values. Application will exit if .env file is not found.
+
+Configuration Categories:
+- Page Pricing: Prices for black & white and color printing
+- Printer Settings: Printer name, timeout, and retry attempts
+- System Settings: Color mode, copy limits
+- Analysis Settings: PDF analysis DPI, color tolerance, thresholds
 """
 
 import os
 import sys
-from typing import Union, Optional
+from typing import Union
 
 
 class Config:
-    """Configuration class that loads settings from .env file."""
+    """
+    Configuration class that loads and provides access to settings from .env file.
+    
+    All configuration values are loaded from environment variables and are
+    accessible via properties with automatic type conversion.
+    """
     
     def __init__(self, env_file: str = ".env"):
-        """Initialize configuration from .env file."""
+        """
+        Initialize configuration from .env file.
+        
+        Args:
+            env_file: Path to .env configuration file (default: ".env")
+            
+        Raises:
+            SystemExit: If .env file is not found
+        """
         self.env_file = env_file
         self._check_env_file_exists()
         self._load_env_file()
     
     def _check_env_file_exists(self):
-        """Check if .env file exists and exit if not found."""
+        """
+        Verify that .env file exists.
+        
+        Exits application with error message if file is not found.
+        """
         if not os.path.exists(self.env_file):
-            print(f"ERROR: Configuration file '{self.env_file}' not found!")
+            print(f"❌ Configuration file '{self.env_file}' not found!")
             print("Please create a .env file with your configuration settings.")
-            print("You can copy .env.example to .env and modify the values as needed.")
             sys.exit(1)
     
     def _load_env_file(self):
-        """Load environment variables from .env file."""
+        """
+        Load environment variables from .env file.
+        
+        Parses key=value pairs and sets them as environment variables.
+        Supports comments (lines starting with #) and quoted values.
+        """
         with open(self.env_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
+                
                 # Skip empty lines and comments
                 if not line or line.startswith('#'):
                     continue
@@ -82,25 +112,27 @@ class Config:
             raise ValueError(f"Could not convert '{key}={value}' to {value_type.__name__}: {e}")
     
     # Page pricing configuration
+    
     @property
     def black_and_white_price(self) -> float:
-        """Get black and white page price."""
+        """Get price per page for black and white printing."""
         return self.get('BLACK_AND_WHITE_PRICE', float)
     
     @property
     def color_price(self) -> float:
-        """Get color page price."""
+        """Get price per page for color printing."""
         return self.get('COLOR_PRICE', float)
     
     # Printer configuration
+    
     @property
     def printer_name(self) -> str:
-        """Get printer name."""
+        """Get CUPS printer name."""
         return self.get('PRINTER_NAME', str)
     
     @property
     def printer_timeout(self) -> int:
-        """Get printer timeout in seconds."""
+        """Get printer command timeout in seconds."""
         return self.get('PRINTER_TIMEOUT', int)
     
     @property
@@ -109,35 +141,37 @@ class Config:
         return self.get('PRINTER_RETRY_ATTEMPTS', int)
     
     # System settings
+    
     @property
     def default_color_mode(self) -> str:
-        """Get default color mode."""
+        """Get default color mode ('Color' or 'Black and White')."""
         return self.get('DEFAULT_COLOR_MODE', str)
     
     @property
     def max_copies(self) -> int:
-        """Get maximum number of copies."""
+        """Get maximum number of copies allowed per print job."""
         return self.get('MAX_COPIES', int)
     
     @property
     def min_copies(self) -> int:
-        """Get minimum number of copies."""
+        """Get minimum number of copies required per print job."""
         return self.get('MIN_COPIES', int)
     
     # Analysis settings
+    
     @property
     def pdf_analysis_dpi(self) -> int:
-        """Get PDF analysis DPI."""
+        """Get DPI used for PDF analysis (higher = more accurate but slower)."""
         return self.get('PDF_ANALYSIS_DPI', int)
     
     @property
     def color_tolerance(self) -> int:
-        """Get color tolerance for analysis."""
+        """Get color tolerance for distinguishing color vs grayscale (0-255)."""
         return self.get('COLOR_TOLERANCE', int)
     
     @property
     def pixel_count_threshold(self) -> int:
-        """Get pixel count threshold for analysis."""
+        """Get minimum pixel count threshold for color detection."""
         return self.get('PIXEL_COUNT_THRESHOLD', int)
 
 
@@ -146,5 +180,10 @@ config = Config()
 
 
 def get_config() -> Config:
-    """Get the global configuration instance."""
+    """
+    Get the global configuration instance.
+    
+    Returns:
+        Global Config object with loaded settings
+    """
     return config

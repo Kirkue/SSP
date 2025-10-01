@@ -1,9 +1,21 @@
-# printing/printer_manager.py
+"""
+Printer Manager Module
+
+Manages print job execution via CUPS (Common Unix Printing System) in background threads.
+Handles PDF page selection, print queue monitoring, error detection (including paper jams),
+and integrates with ink analysis for tracking consumables.
+
+Key Components:
+- PrinterThread: Background thread for executing print jobs
+- PrinterManager: Coordinates print jobs and manages printer availability
+- Status Monitoring: Active monitoring for paper jams, offline status, and errors
+"""
+
 import os
 import subprocess
 import tempfile
 import threading
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, QTimer
 from config import get_config
 from managers.ink_analysis_manager import InkAnalysisManager
 from managers.sms_manager import send_paper_jam_sms, send_printing_error_sms
@@ -14,15 +26,40 @@ try:
 except ImportError:
     PYMUPDF_AVAILABLE = False
 
+
 class PrinterThread(QThread):
     """
-    Handles the actual printing task in a background thread to avoid freezing the GUI.
+    Executes print jobs in a background thread to prevent GUI freezing.
+    
+    Handles the complete print workflow:
+    1. Creates temporary PDF with selected pages
+    2. Sends print job to CUPS
+    3. Monitors print queue and printer status
+    4. Triggers ink analysis after successful printing
+    5. Cleans up temporary files
+    
+    Signals:
+        print_success: Emitted when print job completes successfully
+        print_failed(str): Emitted with error message when print job fails
+        print_waiting: Emitted when job is sent and waiting for completion
     """
+    
     print_success = pyqtSignal()
     print_failed = pyqtSignal(str)
     print_waiting = pyqtSignal()
 
     def __init__(self, file_path, copies, color_mode, selected_pages, printer_name, ink_analysis_thread_manager=None):
+        """
+        Initialize print thread.
+        
+        Args:
+            file_path: Path to PDF file to print
+            copies: Number of copies to print
+            color_mode: 'Color' or 'Black and White'
+            selected_pages: List of page numbers to print
+            printer_name: CUPS printer name
+            ink_analysis_thread_manager: Manager for ink usage analysis (optional)
+        """
         super().__init__()
         self.file_path = file_path
         self.copies = copies
@@ -31,266 +68,214 @@ class PrinterThread(QThread):
         self.printer_name = printer_name
         self.temp_pdf_path = None
         self.ink_analysis_thread_manager = ink_analysis_thread_manager
-        
-        if ink_analysis_thread_manager:
-            print("DEBUG: Ink analysis thread manager provided")
-        else:
-            print("DEBUG: No ink analysis thread manager provided, skipping ink analysis setup")
 
     def run(self):
-        """The main logic for the printing thread."""
+        """Execute the complete print workflow."""
         if not PYMUPDF_AVAILABLE:
             self.print_failed.emit("PyMuPDF library is not installed.")
             return
 
         try:
-            # Step 1: Create a temporary PDF with only the selected pages
+            # Create temporary PDF with selected pages
             self.create_temp_pdf_with_selected_pages()
             if not self.temp_pdf_path:
-                return # Error already emitted inside the creation method
+                return
 
-            # Step 2: Construct the CUPS lp command
+            # Build and execute CUPS print command
             command = self.build_print_command()
-            mode_str = "color" if self.color_mode == "Color" else "monochrome"
             config = get_config()
-            print(f"Executing print command: {' '.join(command)}")
-            print(f"Printing file: {self.temp_pdf_path}")
-            print(f"Printer: {self.printer_name}")
-            print(f"Color mode: {self.color_mode} -> {mode_str}")
-            print(f"Copies: {self.copies}")
-
-            # Step 3: Execute the command and wait for it to complete
-            print(f"DEBUG: About to execute CUPS command: {' '.join(command)}")
+            print(f"Printing: {len(self.selected_pages)} pages, {self.copies} copies, {self.color_mode}")
+            
             process = subprocess.run(
                 command, 
                 capture_output=True, 
                 text=True, 
-                check=True,  # Raises CalledProcessError on non-zero exit codes
-                timeout=config.printer_timeout  # Use config timeout
+                check=True,
+                timeout=config.printer_timeout
             )
-            
-            print(f"DEBUG: CUPS command executed successfully")
-            print(f"DEBUG: CUPS stdout: {process.stdout}")
-            print(f"DEBUG: CUPS stderr: {process.stderr}")
 
-            # Step 4: Validate the print job was actually sent
-            print(f"Print job sent to CUPS successfully. stdout: {process.stdout}")
-            
-            # Check if the print job was actually accepted by CUPS
+            # Validate print job was accepted by CUPS
             if not process.stdout or "request id is" not in process.stdout:
-                print("ERROR: CUPS did not return a job ID - print job may have failed")
                 self.print_failed.emit("Print job was not accepted by CUPS. Check printer connection.")
                 return
             
-            # Extract job ID from the output (format: "request id is HP_Smart_Tank_580_590_series_5E0E1D_USB-1 (1 file(s))")
-            job_id = None
-            print(f"DEBUG: Full CUPS output: '{process.stdout}'")
-            if "request id is" in process.stdout:
-                try:
-                    # More robust job ID extraction
-                    parts = process.stdout.split("request id is")
-                    if len(parts) > 1:
-                        job_id_part = parts[1].strip()
-                        # Extract the job ID (everything before the first space or parenthesis)
-                        job_id = job_id_part.split()[0].split('(')[0]
-                        print(f"Print job ID extracted: '{job_id}'")
-                    else:
-                        print("Could not find job ID in output")
-                        self.print_failed.emit("Could not extract print job ID from CUPS response.")
-                        return
-                except Exception as e:
-                    print(f"Error extracting job ID: {e}")
-                    self.print_failed.emit(f"Error processing CUPS response: {e}")
-                    return
-            else:
-                print("No 'request id is' found in CUPS output")
-                self.print_failed.emit("CUPS did not return a valid job ID.")
+            # Extract job ID from CUPS response
+            job_id = self._extract_job_id(process.stdout)
+            if not job_id:
                 return
             
-            # Wait for the print job to actually complete
-            if job_id:
-                # Signal that we're now waiting for actual printing to complete
-                self.print_waiting.emit()
-                print(f"DEBUG: Starting to wait for print job {job_id} to complete...")
-                completion_success = self.wait_for_print_completion(job_id)
-                if not completion_success:
-                    print("WARNING: Print job completion check failed, but continuing...")
-            else:
-                # If we can't get job ID, this is a critical error
-                print("ERROR: No job ID available - print job was not accepted by CUPS")
-                self.print_failed.emit("Print job was not accepted by CUPS. Check printer connection.")
+            # Wait for print job to complete with active monitoring
+            self.print_waiting.emit()
+            completion_success = self.wait_for_print_completion(job_id)
+            
+            if not completion_success:
                 return
             
-            # Step 5: Analyze ink usage and update database
-            print("DEBUG: About to start ink analysis...")
-            try:
-                self._analyze_and_update_ink_usage()
-                print("DEBUG: Ink analysis operation queued, waiting for completion...")
-                # Don't emit print_success here - wait for ink analysis callback
-            except Exception as e:
-                print(f"DEBUG: Ink analysis failed: {e}")
-                print("DEBUG: Continuing despite ink analysis failure...")
-            # Only emit success if we actually completed a print job
-            if job_id or completion_success:
-                print("DEBUG: Emitting print_success signal - print job was completed")
-                self.print_success.emit()
-                print("DEBUG: print_success signal emitted")
-            else:
-                print("DEBUG: No print job was actually completed, not emitting success")
-                # If no job was completed, emit failure instead
-                self.print_failed.emit("Print job was not completed successfully.")
+            # Analyze ink usage and update database
+            self._analyze_and_update_ink_usage()
+            
+            # Emit success signal
+            self.print_success.emit()
 
         except subprocess.TimeoutExpired:
-            error_message = "Printing command timed out."
-            print(f"Printing error - sending SMS notification: {error_message}")
-            try:
-                send_printing_error_sms(error_message)
-                print("SMS notification sent for printing timeout")
-            except Exception as sms_error:
-                print(f"Failed to send SMS notification: {sms_error}")
-            self.print_failed.emit(error_message)
+            self._handle_print_error("Printing command timed out.")
         except FileNotFoundError:
-            error_message = "The 'lp' command was not found. Is CUPS installed?"
-            print(f"Printing error - sending SMS notification: {error_message}")
-            try:
-                send_printing_error_sms(error_message)
-                print("SMS notification sent for missing lp command")
-            except Exception as sms_error:
-                print(f"Failed to send SMS notification: {sms_error}")
-            self.print_failed.emit(error_message)
+            self._handle_print_error("The 'lp' command was not found. Is CUPS installed?")
         except subprocess.CalledProcessError as e:
-            error_message = f"CUPS Error: {e.stderr.strip()}"
-            print(f"Printing error - sending SMS notification: {error_message}")
-            try:
-                send_printing_error_sms(error_message)
-                print("SMS notification sent for CUPS error")
-            except Exception as sms_error:
-                print(f"Failed to send SMS notification: {sms_error}")
-            print(error_message)
-            self.print_failed.emit(error_message)
+            self._handle_print_error(f"CUPS Error: {e.stderr.strip()}")
         except Exception as e:
-            error_message = f"An unexpected error occurred: {str(e)}"
-            print(f"Printing error - sending SMS notification: {error_message}")
-            try:
-                send_printing_error_sms(error_message)
-                print("SMS notification sent for unexpected error")
-            except Exception as sms_error:
-                print(f"Failed to send SMS notification: {sms_error}")
-            self.print_failed.emit(error_message)
+            self._handle_print_error(f"An unexpected error occurred: {str(e)}")
         finally:
-            # Step 5: Clean up the temporary file
             self.cleanup_temp_pdf()
+
+    def _extract_job_id(self, cups_output):
+        """
+        Extract job ID from CUPS command output.
+        
+        Args:
+            cups_output: stdout from CUPS lp command
+            
+        Returns:
+            Job ID string or None if extraction fails
+        """
+        try:
+            parts = cups_output.split("request id is")
+            if len(parts) > 1:
+                job_id_part = parts[1].strip()
+                job_id = job_id_part.split()[0].split('(')[0]
+                print(f"Print job ID: {job_id}")
+                return job_id
+            else:
+                self.print_failed.emit("Could not extract print job ID from CUPS response.")
+                return None
+        except Exception as e:
+            print(f"❌ Error extracting job ID: {e}")
+            self.print_failed.emit(f"Error processing CUPS response: {e}")
+            return None
+
+    def _handle_print_error(self, error_message):
+        """
+        Handle print errors with SMS notification.
+        
+        Args:
+            error_message: Description of the error
+        """
+        print(f"❌ {error_message}")
+        try:
+            send_printing_error_sms(error_message)
+        except Exception as sms_error:
+            print(f"⚠️ Failed to send SMS notification: {sms_error}")
+        self.print_failed.emit(error_message)
 
     def create_temp_pdf_with_selected_pages(self):
         """
-        Creates a new PDF file containing only the pages the user selected.
+        Create a temporary PDF containing only the selected pages.
+        
+        Uses PyMuPDF to extract pages from the original PDF.
+        Sets self.temp_pdf_path to the temporary file path on success.
         """
         try:
             original_doc = fitz.open(self.file_path)
-            # fitz requires a 0-indexed list of pages
             pages_0_indexed = [p - 1 for p in self.selected_pages]
             
-            temp_doc = fitz.open()  # Create a new empty PDF
+            temp_doc = fitz.open()
             
-            # Copy each selected page individually (compatible with older PyMuPDF versions)
+            # Copy selected pages
             for page_num in pages_0_indexed:
                 temp_doc.insert_pdf(original_doc, from_page=page_num, to_page=page_num)
             
-            # Save to a temporary file
+            # Save to temporary file
             fd, self.temp_pdf_path = tempfile.mkstemp(suffix=".pdf", prefix="printjob-")
             os.close(fd)
             temp_doc.save(self.temp_pdf_path, garbage=4, deflate=True)
             temp_doc.close()
             original_doc.close()
-            print(f"Created temporary PDF for printing at: {self.temp_pdf_path}")
+            
         except Exception as e:
-            error_msg = f"Failed to create temporary PDF: {str(e)}"
-            print(error_msg)
-            self.print_failed.emit(error_msg)
+            print(f"❌ Failed to create temporary PDF: {str(e)}")
+            self.print_failed.emit(f"Failed to create temporary PDF: {str(e)}")
             self.temp_pdf_path = None
 
     def wait_for_print_completion(self, job_id):
-        """Wait for the print job to actually complete with active monitoring for paper jams."""
+        """
+        Wait for print job to complete with active monitoring.
+        
+        Monitors the CUPS print queue and printer status every 2 seconds.
+        After job leaves queue, continues monitoring for 5 seconds to catch
+        delayed errors like paper jams.
+        
+        Args:
+            job_id: CUPS job ID to monitor
+            
+        Returns:
+            True if print job completed successfully, False otherwise
+        """
         import time
         
-        print(f"Waiting for print job {job_id} to complete...")
         config = get_config()
-        max_wait_time = config.printer_timeout * 10  # 10x timeout for completion wait
-        post_completion_wait = 5  # Wait 5 seconds after completion to catch delayed errors
-        check_interval = 2   # Check every 3 seconds for monitoring
+        max_wait_time = config.printer_timeout * 10
+        post_completion_wait = 5  # Wait 5 seconds after completion
+        check_interval = 2
         elapsed_time = 0
-        job_completion_time = None  # Track when job completed
+        job_completion_time = None
         
         while elapsed_time < max_wait_time:
             try:
-                # Check if the job is still in the queue
+                # Check if job is still in CUPS queue
                 result = subprocess.run(['lpstat', '-o', job_id], 
                                       capture_output=True, text=True)
                 
-                print(f"lpstat result for {job_id}: returncode={result.returncode}, stdout='{result.stdout.strip()}'")
-                
                 if result.returncode != 0 or not result.stdout.strip():
-                    # Job is no longer in the queue
+                    # Job is no longer in queue
                     if job_completion_time is None:
-                        # Job just completed, start post-completion monitoring
                         job_completion_time = elapsed_time
-                        print(f"Print job {job_id} completed after {elapsed_time}s, monitoring for {post_completion_wait}s to catch any delayed errors...")
+                        print(f"Print job completed after {elapsed_time}s, monitoring for {post_completion_wait}s...")
                     else:
-                        # Check if we've waited long enough after completion
+                        # Check if post-completion monitoring is complete
                         time_since_completion = elapsed_time - job_completion_time
                         if time_since_completion >= post_completion_wait:
-                            print(f"Post-completion monitoring complete ({time_since_completion}s), print job successful")
+                            print(f"✅ Print job successful")
                             return True
-                        else:
-                            print(f"Post-completion monitoring... ({time_since_completion}s / {post_completion_wait}s)")
-                else:
-                    # Job still in queue - actively printing
-                    print(f"Print job {job_id} still printing... ({elapsed_time}s elapsed)")
                 
-                # Always check for critical errors during printing AND post-completion
-                try:
-                    printer_status = self._check_printer_status()
-                    if printer_status['status'] == 'paper_jam':
-                        print(f"Paper jam detected: {printer_status['message']}")
-                        
-                        # Send SMS notification for paper jam
-                        print("Paper jam detected - sending SMS notification")
-                        try:
-                            send_paper_jam_sms()
-                            print("SMS notification sent for paper jam")
-                        except Exception as e:
-                            print(f"Failed to send SMS notification: {e}")
-                        
-                        self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
-                        return False
-                    elif printer_status['status'] == 'offline':
-                        print(f"Printer went offline: {printer_status['message']}")
-                        self.print_failed.emit(f"Printer offline: {printer_status['message']}")
-                        return False
-                    elif printer_status['status'] == 'error':
-                        print(f"Printer error detected: {printer_status['message']}")
-                        self.print_failed.emit(f"Printer error: {printer_status['message']}")
-                        return False
-                except Exception as e:
-                    print(f"Error checking printer status: {e}")
-                    # Don't fail the print job for status check errors
+                # Check for printer errors (paper jam, offline, etc.)
+                printer_status = self._check_printer_status()
+                if printer_status['status'] == 'paper_jam':
+                    print(f"❌ Paper jam detected: {printer_status['message']}")
+                    try:
+                        send_paper_jam_sms()
+                    except Exception as e:
+                        print(f"⚠️ Failed to send SMS: {e}")
+                    self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
+                    return False
+                elif printer_status['status'] == 'offline':
+                    print(f"❌ Printer offline: {printer_status['message']}")
+                    self.print_failed.emit(f"Printer offline: {printer_status['message']}")
+                    return False
+                elif printer_status['status'] == 'error':
+                    print(f"❌ Printer error: {printer_status['message']}")
+                    self.print_failed.emit(f"Printer error: {printer_status['message']}")
+                    return False
                     
                 time.sleep(check_interval)
                 elapsed_time += check_interval
                     
             except Exception as e:
-                print(f"Error checking print job status: {e}")
+                print(f"⚠️ Error checking print status: {e}")
                 time.sleep(check_interval)
                 elapsed_time += check_interval
         
-        print(f"Print job {job_id} timed out after {max_wait_time} seconds")
+        print(f"❌ Print job timed out after {max_wait_time} seconds")
         return False
 
     def build_print_command(self):
-        """Constructs the list of arguments for the subprocess call."""
+        """
+        Build CUPS lp command for printing.
+        
+        Returns:
+            List of command arguments for subprocess.run()
+        """
         mode_str = "color" if self.color_mode == "Color" else "monochrome"
         
-        # Use the exact command format specified for Raspberry Pi
         command = [
             "lp",
             "-d", self.printer_name,
@@ -306,73 +291,53 @@ class PrinterThread(QThread):
         return command
 
     def _analyze_and_update_ink_usage(self):
-        """Analyze ink usage and update database after successful printing."""
-        print("DEBUG: _analyze_and_update_ink_usage called")
+        """
+        Queue ink usage analysis for the printed pages.
+        
+        Analysis is performed in a dedicated thread to avoid blocking.
+        Results are used to update CMYK ink levels in the database.
+        """
         if not self.ink_analysis_thread_manager:
-            print("Warning: No ink analysis thread manager available, skipping ink analysis")
             return
         
         try:
-            print("Starting ink usage analysis after printing...")
-            print(f"DEBUG: PDF path: {self.file_path}")
-            print(f"DEBUG: Selected pages: {self.selected_pages}")
-            print(f"DEBUG: Copies: {self.copies}")
-            
-            # Queue the analysis operation in the dedicated thread
-            operation = self.ink_analysis_thread_manager.analyze_and_update(
+            self.ink_analysis_thread_manager.analyze_and_update(
                 pdf_path=self.file_path,
                 selected_pages=self.selected_pages,
                 copies=self.copies,
                 dpi=150,
-                color_mode=self.color_mode,  # Pass color mode to ink analysis
+                color_mode=self.color_mode,
                 callback=self._on_ink_analysis_completed
             )
-            
-            print("DEBUG: Ink analysis operation queued in dedicated thread")
-                
         except Exception as e:
-            print(f"Error during ink analysis: {e}")
-            import traceback
-            traceback.print_exc()
-            # Don't fail the print job if ink analysis fails
-            pass
+            print(f"⚠️ Error queueing ink analysis: {e}")
     
     def _on_ink_analysis_completed(self, operation):
-        """Callback for when ink analysis is completed."""
+        """
+        Callback invoked when ink analysis completes.
+        
+        Args:
+            operation: InkAnalysisOperation object with result or error
+        """
         if operation.error:
-            print(f"Ink analysis failed: {operation.error}")
+            print(f"⚠️ Ink analysis failed: {operation.error}")
         else:
             result = operation.result
             if result.get('success', False):
-                print("Ink analysis completed successfully")
                 if result.get('database_updated', False):
-                    print("Database updated with new ink levels")
-                else:
-                    print("Warning: Database update failed")
-            else:
-                print(f"Ink analysis failed: {result.get('error', 'Unknown error')}")
-        
-        # Emit print_success signal now that ink analysis is complete
-        print("DEBUG: Ink analysis completed, emitting print_success signal...")
-        print("DEBUG: Current thread for signal emission:", threading.current_thread().name)
-        
-        try:
-            # Use QTimer.singleShot to emit signal from main thread
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(0, self.print_success.emit)
-            print("DEBUG: print_success signal queued for main thread emission")
-            print("DEBUG: Signal emission completed successfully")
-        except Exception as e:
-            print(f"DEBUG: ERROR emitting print_success signal: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        print("DEBUG: Ink analysis callback method completed")
+                    print("Ink levels updated in database")
 
     def _check_printer_status(self):
-        """Check printer status for errors including paper jams."""
+        """
+        Check current printer status using lpstat.
+        
+        Returns:
+            Dictionary with keys:
+                - status: 'ready', 'paper_jam', 'offline', 'error', or 'unknown'
+                - message: Human-readable status message
+                - details: Additional status details
+        """
         try:
-            # Get detailed printer status
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True)
             
@@ -425,23 +390,39 @@ class PrinterThread(QThread):
             }
 
     def cleanup_temp_pdf(self):
-        """Deletes the temporary PDF file if it was created."""
+        """Delete the temporary PDF file if it was created."""
         if self.temp_pdf_path and os.path.exists(self.temp_pdf_path):
             try:
                 os.remove(self.temp_pdf_path)
-                print(f"Cleaned up temporary file: {self.temp_pdf_path}")
             except OSError as e:
-                print(f"Error cleaning up temp file {self.temp_pdf_path}: {e}")
+                print(f"⚠️ Error cleaning up temp file: {e}")
+
 
 class PrinterManager(QObject):
     """
-    Manages print jobs by spawning PrinterThread instances.
+    Manages print jobs and printer availability.
+    
+    Creates and manages PrinterThread instances for executing print jobs.
+    Checks printer availability before starting jobs and forwards signals
+    from print threads to the main application.
+    
+    Signals:
+        print_job_successful: Emitted when a print job completes successfully
+        print_job_failed(str): Emitted with error message when a print job fails
+        print_job_waiting: Emitted when job is sent and waiting for completion
     """
+    
     print_job_successful = pyqtSignal()
     print_job_failed = pyqtSignal(str)
     print_job_waiting = pyqtSignal()
 
     def __init__(self, ink_analysis_thread_manager=None):
+        """
+        Initialize printer manager.
+        
+        Args:
+            ink_analysis_thread_manager: Manager for ink analysis (optional)
+        """
         super().__init__()
         config = get_config()
         self.printer_name = config.printer_name
@@ -451,28 +432,32 @@ class PrinterManager(QObject):
 
     def print_file(self, file_path, copies, color_mode, selected_pages):
         """
-        Initiates a new print job in a background thread.
-        """
-        print(f"Received print request for {file_path}")
-        print(f"Printer name: {self.printer_name}")
-        print(f"Copies: {copies}, Color mode: {color_mode}, Pages: {selected_pages}")
+        Initiate a new print job in a background thread.
         
-        # Check if a print job is already running
+        Args:
+            file_path: Path to PDF file to print
+            copies: Number of copies to print
+            color_mode: 'Color' or 'Black and White'
+            selected_pages: List of page numbers to print
+        """
+        print(f"📄 Print request: {len(selected_pages)} pages × {copies} copies ({color_mode})")
+        
+        # Prevent duplicate print jobs
         if hasattr(self, 'print_thread') and self.print_thread and self.print_thread.isRunning():
-            print("WARNING: Print job already running, ignoring duplicate request")
+            print("⚠️ Print job already running, ignoring duplicate request")
             return
         
-        # Check printer availability (basic check only)
+        # Verify printer is available
         if not self.check_printer_availability():
-            print(f"🔍 DEBUG: Emitting print_job_failed signal from PrinterManager")
             self.print_job_failed.emit("Printer is not available. Please check printer connection.")
             return
         
-        # Check if file exists
+        # Verify file exists
         if not os.path.exists(file_path):
             self.print_job_failed.emit(f"File not found: {file_path}")
             return
             
+        # Create and start print thread
         self.print_thread = PrinterThread(
             file_path=file_path,
             copies=copies,
@@ -488,50 +473,62 @@ class PrinterManager(QObject):
         self.print_thread.start()
 
     def check_printer_availability(self):
-        """Check if the configured printer is available."""
+        """
+        Check if the configured printer is available and ready.
+        
+        Verifies:
+        - CUPS lp command is available
+        - CUPS daemon (cupsd) is running
+        - Printer exists in CUPS
+        - Printer is not in error state (offline, jammed, etc.)
+        
+        Returns:
+            True if printer is available and ready, False otherwise
+        """
         try:
-            # Check if lp command is available
+            # Check if lp command exists
             result = subprocess.run(['which', 'lp'], capture_output=True, text=True)
             if result.returncode != 0:
-                print("WARNING: 'lp' command not found. CUPS may not be installed.")
+                print("⚠️ 'lp' command not found. Is CUPS installed?")
                 return False
             
             # Check if CUPS daemon is running
             try:
                 result = subprocess.run(['pgrep', 'cupsd'], capture_output=True, text=True)
                 if result.returncode != 0:
-                    print("WARNING: CUPS daemon (cupsd) is not running")
+                    print("⚠️ CUPS daemon (cupsd) is not running")
                     return False
             except Exception as e:
-                print(f"WARNING: Error checking CUPS daemon: {e}")
+                print(f"⚠️ Error checking CUPS daemon: {e}")
                 return False
                 
             # Check if printer exists
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                print(f"WARNING: Printer '{self.printer_name}' not found.")
-                print("Available printers:")
-                subprocess.run(['lpstat', '-p'], capture_output=False)
+                print(f"⚠️ Printer '{self.printer_name}' not found")
                 return False
             
-            # Check if printer is in a good state (not offline, jammed, etc.)
+            # Check printer state
             output = result.stdout.lower()
             if 'offline' in output or 'stopped' in output or 'jam' in output:
-                print(f"WARNING: Printer '{self.printer_name}' is in error state: {output}")
+                print(f"⚠️ Printer is in error state")
                 return False
                 
-            print(f"Printer '{self.printer_name}' is available and ready.")
             return True
             
         except Exception as e:
-            print(f"Error checking printer availability: {e}")
+            print(f"❌ Error checking printer availability: {e}")
             return False
 
     def check_printer_status(self):
-        """Check printer status for errors including paper jams."""
+        """
+        Get detailed printer status.
+        
+        Returns:
+            Dictionary with status information (see PrinterThread._check_printer_status)
+        """
         try:
-            # Get detailed printer status
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True)
             
@@ -544,7 +541,6 @@ class PrinterManager(QObject):
             
             output = result.stdout.lower()
             
-            # Check for various error conditions
             if 'jam' in output or 'paper jam' in output:
                 return {
                     'status': 'paper_jam',
@@ -584,10 +580,15 @@ class PrinterManager(QObject):
             }
 
     def check_for_paper_jam(self):
-        """Specifically check for paper jam condition."""
+        """
+        Check specifically for paper jam condition.
+        
+        Returns:
+            True if paper jam detected, False otherwise
+        """
         status = self.check_printer_status()
         return status['status'] == 'paper_jam'
 
     def on_thread_finished(self):
-        print("Print thread has finished.")
+        """Handle print thread completion."""
         self.print_thread = None

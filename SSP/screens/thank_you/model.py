@@ -1,51 +1,79 @@
+"""
+Thank You Screen Model
+
+Business logic for the Thank You screen shown after payment completion.
+Manages print job status updates, displays appropriate messages, and handles
+screen redirection timing.
+
+States:
+- initial: Screen first shown
+- waiting: Print job in progress
+- completed: Print job finished successfully
+- error: Print job failed (paper jam or other error)
+- admin_override: Admin manually overriding error state
+"""
+
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 import threading
 import subprocess
-import time
+
 
 class ThankYouModel(QObject):
-    """Model for the Thank You screen - handles business logic and state management."""
+    """
+    Model for the Thank You screen.
     
-    # Signals for UI updates
-    status_updated = pyqtSignal(str, str)  # status_text, subtitle_text
+    Manages state, print job monitoring, and coordinates with the printer manager
+    to display appropriate status messages to users.
+    
+    Signals:
+        status_updated(str, str): Emits (status_text, subtitle_text) for UI updates
+        redirect_to_idle: Emitted when it's time to return to idle screen
+        admin_override_requested: Emitted to show admin override button on errors
+    """
+    
+    status_updated = pyqtSignal(str, str)
     redirect_to_idle = pyqtSignal()
-    admin_override_requested = pyqtSignal()  # request to show admin override button
+    admin_override_requested = pyqtSignal()
     
     def __init__(self):
+        """Initialize the Thank You model."""
         super().__init__()
+        
+        # Redirect timer for auto-navigation back to idle
         self.redirect_timer = QTimer()
         self.redirect_timer.setSingleShot(True)
         self.redirect_timer.timeout.connect(self._on_timer_timeout)
         
-        # Screen states
-        self.current_state = "initial"
-        self.print_job_started = False
-        
-        # Add a periodic check timer for debugging
+        # Status check timer for fallback monitoring
         self.status_check_timer = QTimer()
         self.status_check_timer.timeout.connect(self._check_print_status)
         self.status_check_timer.setSingleShot(False)
         
+        # Screen state tracking
+        self.current_state = "initial"
+        self.print_job_started = False
+        self.error_type = None
+        
     def _on_timer_timeout(self):
-        """Called when the redirect timer expires."""
-        print("Thank you screen: Timer timeout triggered, emitting redirect signal...")
+        """Handle redirect timer timeout."""
         self.redirect_to_idle.emit()
         
     def on_enter(self, main_app):
-        """Called when the screen is shown."""
-        print("=" * 60)
-        print("Thank you screen: on_enter() called")
-        print("Thank you screen: main_app type:", type(main_app).__name__)
-        print("Thank you screen: print_job_started flag:", self.print_job_started)
-        print("=" * 60)
+        """
+        Called when the screen is shown.
         
+        Connects to printer signals and starts the print job if not already started.
+        
+        Args:
+            main_app: Reference to main application window
+        """
         self.main_app = main_app
         
-        # Check if print job has already been started to prevent duplicates
+        # Prevent duplicate print job starts
         if self.print_job_started:
-            print("Thank you screen: Print job already started, skipping duplicate start")
             return
         
+        # Set initial state
         self.current_state = "waiting"
         self.status_updated.emit(
             "PRINTING IN PROGRESS...",
@@ -53,58 +81,42 @@ class ThankYouModel(QObject):
         )
         self.redirect_timer.stop()
         
-        # Start the print job and monitor both signals and printer status
+        # Connect to printer manager signals
         if hasattr(main_app, 'printer_manager'):
-            print("Thank you screen: Starting print job...")
-            print("Thank you screen: Checking for current_print_job...")
-            if hasattr(main_app, 'current_print_job'):
-                print("Thank you screen: current_print_job found:", main_app.current_print_job)
-            else:
-                print("Thank you screen: ERROR - No current_print_job found!")
-            
-            # Connect to printer signals as primary method
-            print("Thank you screen: Connecting to printer signals...")
             try:
                 main_app.printer_manager.print_job_successful.connect(self._on_print_success)
-                print("Thank you screen: print_job_successful signal connected")
                 main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
-                print("Thank you screen: print_job_failed signal connected")
-                print("Thank you screen: Printer signals connected successfully")
             except Exception as e:
-                print(f"Thank you screen: Error connecting signals: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"❌ Error connecting printer signals: {e}")
             
-            # Start the print job
-            print("Thank you screen: About to call _start_print_job...")
+            # Start print job
             self._start_print_job(main_app)
-            print("Thank you screen: _start_print_job completed")
             
-            # Start timers using QTimer.singleShot to ensure they run in main thread
+            # Start monitoring timers
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(0, self._start_timers)
-            print("Thank you screen: Timer start queued for main thread")
         else:
-            print("Thank you screen: ERROR - No printer manager found!")
-            # Fallback: start timer if no printer manager
-            self.redirect_timer.start(10000)  # 10 second fallback
+            print("❌ No printer manager found")
+            self.redirect_timer.start(10000)
     
     def finish_printing(self):
-        """Updates the state to finished and starts the timer to go idle."""
-        print("Thank you screen: Finishing printing, starting 5-second timer")
+        """
+        Update state to show print completion.
+        
+        Called when print job completes successfully. Starts 5-second timer
+        before redirecting to idle screen.
+        """
         self.current_state = "completed"
         self.status_updated.emit(
             "PRINTING COMPLETED",
             "Kindly collect your documents. We hope to see you again!"
         )
         
-        # Start the 5-second timer to go back to the idle screen
-        print("Thank you screen: Starting 5-second redirect timer...")
+        # Start 5-second timer before returning to idle
         self.redirect_timer.start(5000)
     
     def show_waiting_for_print(self):
-        """Updates the state to show that we're waiting for the actual printing to complete."""
-        print("Thank you screen: Showing waiting for print status")
+        """Update state to show that print job is in progress."""
         self.current_state = "waiting"
         self.status_updated.emit(
             "PRINTING IN PROGRESS...",
@@ -112,13 +124,18 @@ class ThankYouModel(QObject):
         )
     
     def show_printing_error(self, message: str):
-        """Updates the state to show a printing error."""
+        """
+        Update state to show a printing error.
+        
+        Args:
+            message: Error message from printer manager
+        """
         self.current_state = "error"
         
         # Check if this is a paper jam error
         is_paper_jam = "paper jam" in message.lower() or "jam" in message.lower()
         
-        # Sanitize common, verbose CUPS errors for a better user display
+        # Sanitize common verbose CUPS errors for better UX
         if "client-error-document-format-not-supported" in message:
             clean_message = "Document format is not supported by the printer."
         elif "CUPS Error" in message:
@@ -128,7 +145,6 @@ class ThankYouModel(QObject):
         else:
             clean_message = "An unknown printing error occurred."
         
-        # Set the error type for admin override handling
         self.error_type = "paper_jam" if is_paper_jam else "printing_error"
         
         self.status_updated.emit(
@@ -136,200 +152,173 @@ class ThankYouModel(QObject):
             f"Error: {clean_message}\nPlease contact an administrator."
         )
         
-        # Send SMS notification for printing errors (backup method)
-        print(f"Thank you screen: Sending SMS notification for printing error: {message}")
+        # Send SMS notification (backup method)
         try:
             from managers.sms_manager import send_printing_error_sms
             send_printing_error_sms(message)
-            print("Thank you screen: SMS notification sent successfully")
         except Exception as sms_error:
-            print(f"Thank you screen: Failed to send SMS notification: {sms_error}")
+            print(f"⚠️ Failed to send SMS notification: {sms_error}")
         
-        # Emit signal to show admin override button for all printing errors
-        print(f"Thank you screen: Emitting admin_override_requested for {self.error_type}")
+        # Show admin override button
         self.admin_override_requested.emit()
-        
-        # Don't start automatic redirect timer for errors - wait for admin override
     
     def show_paper_jam_error(self, message: str):
-        """Updates the state to show a paper jam error specifically."""
+        """
+        Update state to show a paper jam error specifically.
+        
+        Args:
+            message: Paper jam error message
+        """
         self.current_state = "error"
         self.error_type = "paper_jam"
         
         self.status_updated.emit(
             "PAPER JAM DETECTED",
-            f"Paper jam detected. Please clear the paper jam and try again.\nContact an administrator if needed."
+            "Paper jam detected. Please clear the paper jam and try again.\nContact an administrator if needed."
         )
         
-        # Emit signal to show admin override button
-        print("Thank you screen: Emitting admin_override_requested for paper jam")
+        # Show admin override button
         self.admin_override_requested.emit()
-        
-        # Don't start automatic redirect timer for errors - wait for admin override
     
     def handle_admin_override(self):
-        """Handles admin override - allows going back to idle screen."""
-        print("Thank you screen: Admin override requested")
+        """Handle admin override - allows going back to idle screen."""
         self.current_state = "admin_override"
         self.status_updated.emit(
             "ADMIN OVERRIDE",
             "Returning to idle screen..."
         )
-        # Start a short timer to show the message before redirecting
+        # Short timer before redirecting
         self.redirect_timer.start(2000)
     
-    def _show_printing_warning(self):
-        """Shows a warning if printing is taking too long."""
-        if self.current_state == "waiting":
-            print("Thank you screen: Printing is taking longer than expected")
-            self.status_updated.emit(
-                "PRINTING IN PROGRESS...",
-                "Printing is taking longer than usual. Please wait..."
-            )
-    
     def _on_print_success(self):
-        """Handles successful print completion with enhanced verification."""
-        print("=" * 60)
-        print("Thank you screen: _on_print_success called - Print job completed successfully")
-        print("Thank you screen: Current thread:", threading.current_thread().name)
-        print("=" * 60)
-        
+        """Handle successful print completion."""
         # Stop all timers since we got the success signal
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
-            print("Thank you screen: Safety timeout cancelled")
         
         if hasattr(self, 'warning_timer') and self.warning_timer.isActive():
             self.warning_timer.stop()
-            print("Thank you screen: Warning timer cancelled")
         
         if self.status_check_timer.isActive():
             self.status_check_timer.stop()
-            print("Thank you screen: Status check timer cancelled")
         
+        # Update state
         self.current_state = "completed"
         self.status_updated.emit(
             "PRINTING COMPLETED",
             "Kindly collect your documents. We hope to see you again!"
         )
         
-        # Start the 5-second timer to go back to the idle screen
-        print("Thank you screen: Starting 5-second redirect timer...")
+        # Start 5-second redirect timer
         self.redirect_timer.start(5000)
     
     def _start_print_job(self, main_app):
-        """Start the print job using stored print job details."""
-        print("Thank you screen: _start_print_job called")
+        """
+        Start the print job using stored print job details.
         
+        Args:
+            main_app: Main application window with current_print_job attribute
+        """
         if hasattr(main_app, 'current_print_job') and main_app.current_print_job:
-            print("Thank you screen: Starting print job with stored details...")
-            print(f"Thank you screen: Print job details: {main_app.current_print_job}")
-            
             try:
-                print("Thank you screen: About to call printer_manager.print_file...")
                 main_app.printer_manager.print_file(
                     file_path=main_app.current_print_job['file_path'],
                     selected_pages=main_app.current_print_job['selected_pages'],
                     copies=main_app.current_print_job['copies'],
                     color_mode=main_app.current_print_job['color_mode']
                 )
-                print("Thank you screen: Print job started successfully")
-                self.print_job_started = True  # Mark that print job has been started
-                print("Thank you screen: print_job_started flag set to True")
+                self.print_job_started = True
             except Exception as e:
-                print(f"Thank you screen: Error starting print job: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"❌ Error starting print job: {e}")
                 self.show_printing_error(f"Failed to start print job: {e}")
         else:
-            print("Thank you screen: No print job details found")
             self.show_printing_error("No print job details available")
     
     def _check_print_status(self):
-        """Enhanced printer status checking as fallback with paper jam detection."""
-        # Only check if we're still waiting (signal not received)
+        """
+        Fallback method to check printer status if signals fail.
+        
+        Uses lpstat command to check if printer is idle/ready as a backup
+        method in case print completion signals don't arrive.
+        """
+        # Only check if we're still waiting
         if self.current_state != "waiting":
             return
-            
-        print("Thank you screen: Fallback - Checking printer status...")
         
         try:
-            # Check if printer is idle using lpstat command
             result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True, timeout=5)
             
             if result.returncode == 0:
-                # Parse the output to see if printer is idle
                 output = result.stdout.lower()
                 
-                # Check for paper jam first
+                # Check for errors first
                 if 'jam' in output or 'paper jam' in output:
-                    print("Thank you screen: Fallback - Paper jam detected!")
                     self.show_paper_jam_error("Paper jam detected during printing")
                     return
                 elif 'offline' in output or 'stopped' in output:
-                    print("Thank you screen: Fallback - Printer offline detected!")
                     self.show_printing_error("Printer went offline during printing")
                     return
                 elif 'idle' in output or 'ready' in output:
-                    print("Thank you screen: Fallback - Printer is idle, print job completed")
-                    print("Thank you screen: Signal not received, using fallback method")
+                    # Printer is idle, assume print completed
+                    print("Fallback: Printer idle, marking print as complete")
                     self._on_print_success()
-                else:
-                    print("Thank you screen: Fallback - Printer is still busy")
-            else:
-                print(f"Thank you screen: Fallback - lpstat failed with return code {result.returncode}")
-                print(f"Thank you screen: Error output: {result.stderr}")
-                
+                    
         except subprocess.TimeoutExpired:
-            print("Thank you screen: Fallback - lpstat command timed out")
+            print("⚠️ Fallback lpstat command timed out")
         except Exception as e:
-            print(f"Thank you screen: Fallback - Error checking printer status: {e}")
+            print(f"⚠️ Fallback status check error: {e}")
     
     def _start_timers(self):
-        """Start the timers in the main thread with enhanced monitoring."""
-        print("Thank you screen: Starting enhanced timers in main thread...")
+        """Start monitoring timers in the main thread."""
+        # Start periodic printer status check as fallback (every 5 seconds)
+        self.status_check_timer.start(5000)
         
-        # Start periodic printer status check as fallback (every 10 seconds)
-        self.status_check_timer.start(5000)  # Check every 5 seconds for better jam detection
-        print("Thank you screen: Printer status check started as fallback (every 10 seconds)")
-        
-        # Start a safety timeout in case both methods fail (2 minutes)
-        self.redirect_timer.start(120000)  # 2 minute safety timeout (back to original)
-        print("Thank you screen: Safety timeout started (2 minutes)")
+        # Start safety timeout (2 minutes)
+        self.redirect_timer.start(120000)
     
     def _on_print_failed(self, error_message):
-        """Handles print job failure."""
-        print(f"Thank you screen: Print job failed: {error_message}")
+        """
+        Handle print job failure.
+        
+        Args:
+            error_message: Error description from printer manager
+        """
+        print(f"❌ Print job failed: {error_message}")
         self.show_printing_error(error_message)
     
     def on_leave(self):
-        """Called when the screen is hidden."""
-        # Disconnect printer signals to prevent memory leaks
+        """Called when the screen is hidden - cleanup connections and timers."""
+        # Disconnect printer signals
         if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
             try:
                 self.main_app.printer_manager.print_job_successful.disconnect(self._on_print_success)
                 self.main_app.printer_manager.print_job_failed.disconnect(self._on_print_failed)
-                print("Thank you screen: Printer signals disconnected")
             except:
-                pass  # Ignore errors if signals weren't connected
+                pass
         
-        # Stop the timers if the user navigates away manually
+        # Stop timers
         if self.redirect_timer.isActive():
             self.redirect_timer.stop()
         if self.status_check_timer.isActive():
             self.status_check_timer.stop()
-            print("Thank you screen: Status check timer stopped")
         
-        # Reset the print job started flag for next transaction
+        # Reset state for next transaction
         self.print_job_started = False
-        print("Thank you screen: Print job flag reset for next transaction")
     
     def get_status_style(self, state):
-        """Returns the appropriate style for the status label based on state."""
+        """
+        Get CSS style for status label based on state.
+        
+        Args:
+            state: Current screen state
+            
+        Returns:
+            CSS style string for status label
+        """
         styles = {
             "printing": "color: #36454F; font-size: 42px; font-weight: bold;",
-            "waiting": "color: #ffc107; font-size: 42px; font-weight: bold;",  # Yellow
-            "completed": "color: #28a745; font-size: 42px; font-weight: bold;",  # Green
-            "error": "color: #dc3545; font-size: 42px; font-weight: bold;"  # Red
+            "waiting": "color: #ffc107; font-size: 42px; font-weight: bold;",
+            "completed": "color: #28a745; font-size: 42px; font-weight: bold;",
+            "error": "color: #dc3545; font-size: 42px; font-weight: bold;"
         }
         return styles.get(state, styles["printing"])
