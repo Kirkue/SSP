@@ -15,7 +15,7 @@ class AdminController(QWidget):
         self.view = AdminScreenView()
         
         # Connect to database thread manager if available
-        if hasattr(main_app, 'database_thread_manager'):
+        if hasattr(main_app, 'db_threader'):
             self._connect_to_database_thread_manager()
 
         layout = QGridLayout(self)
@@ -53,9 +53,9 @@ class AdminController(QWidget):
     
     def _connect_to_database_thread_manager(self):
         """Connect to database thread manager for real-time updates."""
-        if hasattr(self.main_app, 'database_thread_manager'):
+        if hasattr(self.main_app, 'db_threader'):
             # Connect CMYK level updates from database thread
-            self.main_app.database_thread_manager.cmyk_levels_updated.connect(self._on_cmyk_levels_updated)
+            self.main_app.db_threader.cmyk_levels_updated.connect(self._on_cmyk_levels_updated)
             print("Admin screen connected to database thread manager")
     
     def _on_cmyk_levels_updated(self, cmyk_data):

@@ -369,7 +369,7 @@ class ChangeDispenser:
             print(f"Error reinitializing hoppers: {e}")
             return False
 
-    def dispense_change(self, amount: float, status_callback=None, admin_screen=None, database_thread_manager=None):
+    def dispense_change(self, amount: float, status_callback=None, admin_screen=None, db_threader=None):
         """Calculates and dispenses the correct change, one coin at a time. Returns actual coins dispensed."""
         if amount <= 0:
             return {'success': True, 'coins_1': 0, 'coins_5': 0}
@@ -486,12 +486,12 @@ class DispenseThread(QThread):
     status_update = pyqtSignal(str)
     dispensing_finished = pyqtSignal(dict)  # Changed to emit the full result dict
 
-    def __init__(self, dispenser: ChangeDispenser, amount: float, admin_screen=None, database_thread_manager=None):
+    def __init__(self, dispenser: ChangeDispenser, amount: float, admin_screen=None, db_threader=None):
         super().__init__()
         self.dispenser = dispenser
         self.amount = amount
         self.admin_screen = admin_screen
-        self.database_thread_manager = database_thread_manager
+        self.db_threader = db_threader
 
     def run(self):
         """This method is executed when the thread starts."""
@@ -499,6 +499,6 @@ class DispenseThread(QThread):
             self.amount, 
             self.status_update.emit, 
             self.admin_screen, 
-            self.database_thread_manager
+            self.db_threader
         )
         self.dispensing_finished.emit(result)

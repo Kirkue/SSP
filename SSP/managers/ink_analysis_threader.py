@@ -1,5 +1,5 @@
 """
-Ink Analysis Thread Manager
+Ink Analysis Threader
 
 Manages ink usage analysis operations in a dedicated thread with its own database connection.
 Analyzes printed pages to calculate CMYK ink consumption and updates the database with
@@ -183,3 +183,4 @@ class InkAnalysisThreadManager(QObject):
         }, callback)
         self.operation_queue.put(operation)
         return operation
+

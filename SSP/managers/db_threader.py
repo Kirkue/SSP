@@ -1,5 +1,5 @@
 """
-Database Thread Manager
+Database Threader
 
 Manages database operations in a dedicated thread to avoid SQLite thread safety issues.
 Provides a queue-based system for executing database operations asynchronously and
@@ -359,3 +359,4 @@ class DatabaseThreadManager(QObject):
         }, callback)
         self.operation_queue.put(operation)
         return operation
+

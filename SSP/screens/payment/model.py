@@ -417,18 +417,18 @@ class PaymentModel(QObject):
                 print("DEBUG: No admin screen found")
             
             # Get database thread manager from main_app
-            database_thread_manager = None
-            if hasattr(self, 'main_app') and hasattr(self.main_app, 'database_thread_manager'):
-                database_thread_manager = self.main_app.database_thread_manager
-                print(f"DEBUG: Database thread manager found: {database_thread_manager}")
+            db_threader = None
+            if hasattr(self, 'main_app') and hasattr(self.main_app, 'db_threader'):
+                db_threader = self.main_app.db_threader
+                print(f"DEBUG: Database threader found: {db_threader}")
             else:
-                print("DEBUG: No database thread manager found")
+                print("DEBUG: No database threader found")
             
             self.dispense_thread = DispenseThread(
                 self.change_dispenser, 
                 change_amount, 
                 admin_screen, 
-                database_thread_manager
+                db_threader
             )
             self.dispense_thread.status_update.connect(self.payment_status_updated.emit)
             self.dispense_thread.dispensing_finished.connect(self._on_dispensing_finished)
@@ -455,9 +455,9 @@ class PaymentModel(QObject):
             self.payment_status_updated.emit(f"Change dispensed! Updating inventory...")
             
             # Update database with actual coins dispensed
-            if hasattr(self, 'main_app') and hasattr(self.main_app, 'database_thread_manager'):
+            if hasattr(self, 'main_app') and hasattr(self.main_app, 'db_threader'):
                 print("DEBUG: Updating coin inventory in database...")
-                self.main_app.database_thread_manager.update_coin_inventory(
+                self.main_app.db_threader.update_coin_inventory(
                     coins_1, coins_5, 
                     callback=self._on_coin_inventory_updated
                 )

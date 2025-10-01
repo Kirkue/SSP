@@ -28,8 +28,8 @@ from screens.data_viewer import DataViewerController
 from screens.thank_you import ThankYouController
 from database.models import init_db
 from managers.printer_manager import PrinterManager
-from managers.database_thread_manager import DatabaseThreadManager
-from managers.ink_analysis_thread_manager import InkAnalysisThreadManager
+from managers.db_threader import DatabaseThreadManager
+from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
 
 try:
@@ -48,8 +48,8 @@ class PrintingSystemApp(QMainWindow):
     Attributes:
         stacked_widget: Container for all application screens
         printer_manager: Handles print job execution and monitoring
-        database_thread_manager: Manages database operations in background thread
-        ink_analysis_thread_manager: Manages ink usage analysis in background thread
+        db_threader: Manages database operations in background thread
+        ink_analysis_threader: Manages ink usage analysis in background thread
     """
     
     # Screen index mapping for stacked widget navigation
@@ -84,10 +84,10 @@ class PrintingSystemApp(QMainWindow):
         self.admin_screen = AdminController(self)
         
         # Initialize thread managers for background operations
-        self.database_thread_manager = DatabaseThreadManager()
-        self.ink_analysis_thread_manager = InkAnalysisThreadManager()
-        self.database_thread_manager.start()
-        self.ink_analysis_thread_manager.start()
+        self.db_threader = DatabaseThreadManager()
+        self.ink_analysis_threader = InkAnalysisThreadManager()
+        self.db_threader.start()
+        self.ink_analysis_threader.start()
         
         # Connect thread managers for real-time data updates
         self._connect_thread_managers()
@@ -129,7 +129,7 @@ class PrintingSystemApp(QMainWindow):
         - Print job status updates (success, failure, waiting)
         """
         # Connect ink analysis completion for database updates
-        self.ink_analysis_thread_manager.analysis_completed.connect(self._on_ink_analysis_completed)
+        self.ink_analysis_threader.analysis_completed.connect(self._on_ink_analysis_completed)
         
         # Connect payment and printing signals (will be connected after screens are initialized)
         # This connection happens after all screens are created to avoid AttributeErrors
@@ -145,7 +145,7 @@ class PrintingSystemApp(QMainWindow):
         """
         if result.get('database_updated', False) and 'cmyk_levels' in result:
             print(f"CMYK levels updated: {result['cmyk_levels']}")
-            self.database_thread_manager.cmyk_levels_updated.emit(result['cmyk_levels'])
+            self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
 
         # Connect payment and printing signals after screens are ready
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
@@ -250,7 +250,7 @@ class PrintingSystemApp(QMainWindow):
         try:
             # Use temp PDF (already has only selected pages!) instead of original file
             # This works even if USB drive is removed
-            self.ink_analysis_thread_manager.analyze_and_update(
+            self.ink_analysis_threader.analyze_and_update(
                 pdf_path=temp_pdf_path,
                 selected_pages=None,  # All pages in temp PDF (already filtered)
                 copies=self.current_print_job['copies'],
@@ -341,10 +341,10 @@ class PrintingSystemApp(QMainWindow):
             cleanup_sms()
             
             # Stop thread managers
-            if hasattr(self, 'database_thread_manager'):
-                self.database_thread_manager.stop()
-            if hasattr(self, 'ink_analysis_thread_manager'):
-                self.ink_analysis_thread_manager.stop()
+            if hasattr(self, 'db_threader'):
+                self.db_threader.stop()
+            if hasattr(self, 'ink_analysis_threader'):
+                self.ink_analysis_threader.stop()
                 
         except Exception as e:
             print(f"❌ Error during cleanup: {e}")
