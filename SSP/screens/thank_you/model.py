@@ -246,7 +246,7 @@ class ThankYouModel(QObject):
             self.show_printing_error("No print job details available")
     
     def _check_print_status(self):
-        """Simplified printer status checking as fallback."""
+        """Enhanced printer status checking as fallback with paper jam detection."""
         # Only check if we're still waiting (signal not received)
         if self.current_state != "waiting":
             return
@@ -260,7 +260,17 @@ class ThankYouModel(QObject):
             if result.returncode == 0:
                 # Parse the output to see if printer is idle
                 output = result.stdout.lower()
-                if 'idle' in output or 'ready' in output:
+                
+                # Check for paper jam first
+                if 'jam' in output or 'paper jam' in output:
+                    print("Thank you screen: Fallback - Paper jam detected!")
+                    self.show_paper_jam_error("Paper jam detected during printing")
+                    return
+                elif 'offline' in output or 'stopped' in output:
+                    print("Thank you screen: Fallback - Printer offline detected!")
+                    self.show_printing_error("Printer went offline during printing")
+                    return
+                elif 'idle' in output or 'ready' in output:
                     print("Thank you screen: Fallback - Printer is idle, print job completed")
                     print("Thank you screen: Signal not received, using fallback method")
                     self._on_print_success()
@@ -280,7 +290,7 @@ class ThankYouModel(QObject):
         print("Thank you screen: Starting enhanced timers in main thread...")
         
         # Start periodic printer status check as fallback (every 10 seconds)
-        self.status_check_timer.start(10000)  # Check every 10 seconds (back to original)
+        self.status_check_timer.start(5000)  # Check every 5 seconds for better jam detection
         print("Thank you screen: Printer status check started as fallback (every 10 seconds)")
         
         # Start a safety timeout in case both methods fail (2 minutes)

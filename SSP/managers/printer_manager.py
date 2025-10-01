@@ -210,14 +210,16 @@ class PrinterThread(QThread):
             self.temp_pdf_path = None
 
     def wait_for_print_completion(self, job_id):
-        """Wait for the print job to actually complete with simplified monitoring."""
+        """Wait for the print job to actually complete with active monitoring for paper jams."""
         import time
         
         print(f"Waiting for print job {job_id} to complete...")
         config = get_config()
         max_wait_time = config.printer_timeout * 10  # 10x timeout for completion wait
-        check_interval = 5   # Check every 5 seconds (back to original)
+        post_completion_wait = 5  # Wait 5 seconds after completion to catch delayed errors
+        check_interval = 2   # Check every 3 seconds for monitoring
         elapsed_time = 0
+        job_completion_time = None  # Track when job completed
         
         while elapsed_time < max_wait_time:
             try:
@@ -228,36 +230,50 @@ class PrinterThread(QThread):
                 print(f"lpstat result for {job_id}: returncode={result.returncode}, stdout='{result.stdout.strip()}'")
                 
                 if result.returncode != 0 or not result.stdout.strip():
-                    # Job is no longer in the queue, it's completed
-                    print(f"Print job {job_id} completed after {elapsed_time} seconds")
-                    return True
+                    # Job is no longer in the queue
+                    if job_completion_time is None:
+                        # Job just completed, start post-completion monitoring
+                        job_completion_time = elapsed_time
+                        print(f"Print job {job_id} completed after {elapsed_time}s, monitoring for {post_completion_wait}s to catch any delayed errors...")
+                    else:
+                        # Check if we've waited long enough after completion
+                        time_since_completion = elapsed_time - job_completion_time
+                        if time_since_completion >= post_completion_wait:
+                            print(f"Post-completion monitoring complete ({time_since_completion}s), print job successful")
+                            return True
+                        else:
+                            print(f"Post-completion monitoring... ({time_since_completion}s / {post_completion_wait}s)")
                 else:
-                    # Job still in queue, check for critical errors only
+                    # Job still in queue - actively printing
                     print(f"Print job {job_id} still printing... ({elapsed_time}s elapsed)")
-                    
-                    # Only check for critical errors that would stop printing
-                    try:
-                        printer_status = self._check_printer_status()
-                        if printer_status['status'] == 'paper_jam':
-                            print(f"Paper jam detected during printing: {printer_status['message']}")
-                            
-                            # Send SMS notification for paper jam
-                            print("Paper jam detected during printing - sending SMS notification")
-                            try:
-                                send_paper_jam_sms()
-                                print("SMS notification sent for paper jam during printing")
-                            except Exception as e:
-                                print(f"Failed to send SMS notification: {e}")
-                            
-                            self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
-                            return False
-                        elif printer_status['status'] == 'offline':
-                            print(f"Printer went offline during printing: {printer_status['message']}")
-                            self.print_failed.emit(f"Printer offline: {printer_status['message']}")
-                            return False
-                    except Exception as e:
-                        print(f"Error checking printer status during printing: {e}")
-                        # Don't fail the print job for status check errors
+                
+                # Always check for critical errors during printing AND post-completion
+                try:
+                    printer_status = self._check_printer_status()
+                    if printer_status['status'] == 'paper_jam':
+                        print(f"Paper jam detected: {printer_status['message']}")
+                        
+                        # Send SMS notification for paper jam
+                        print("Paper jam detected - sending SMS notification")
+                        try:
+                            send_paper_jam_sms()
+                            print("SMS notification sent for paper jam")
+                        except Exception as e:
+                            print(f"Failed to send SMS notification: {e}")
+                        
+                        self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
+                        return False
+                    elif printer_status['status'] == 'offline':
+                        print(f"Printer went offline: {printer_status['message']}")
+                        self.print_failed.emit(f"Printer offline: {printer_status['message']}")
+                        return False
+                    elif printer_status['status'] == 'error':
+                        print(f"Printer error detected: {printer_status['message']}")
+                        self.print_failed.emit(f"Printer error: {printer_status['message']}")
+                        return False
+                except Exception as e:
+                    print(f"Error checking printer status: {e}")
+                    # Don't fail the print job for status check errors
                     
                 time.sleep(check_interval)
                 elapsed_time += check_interval
