@@ -299,6 +299,8 @@ class PrinterThread(QThread):
         """
         Check current printer status using lpstat.
         
+        Improved to handle multiple printers and detect errors across the system.
+        
         Returns:
             Dictionary with keys:
                 - status: 'ready', 'paper_jam', 'offline', 'error', or 'unknown'
@@ -306,15 +308,14 @@ class PrinterThread(QThread):
                 - details: Additional status details
         """
         try:
+            # First check the specific configured printer
             result = subprocess.run(['lpstat', '-p', self.printer_name], 
                                   capture_output=True, text=True)
             
             if result.returncode != 0:
-                return {
-                    'status': 'error',
-                    'message': f"Printer '{self.printer_name}' not found or not responding",
-                    'details': result.stderr.strip()
-                }
+                # If specific printer not found, check all printers for errors
+                print(f"⚠️ Configured printer '{self.printer_name}' not found, checking all printers")
+                return self._check_all_printers_status()
             
             output = result.stdout.lower()
             
@@ -354,6 +355,58 @@ class PrinterThread(QThread):
             return {
                 'status': 'error',
                 'message': f"Error checking printer status: {e}",
+                'details': str(e)
+            }
+    
+    def _check_all_printers_status(self):
+        """
+        Check status across all printers when configured printer is not found.
+        
+        Returns:
+            Dictionary with status information from all printers
+        """
+        try:
+            result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return {
+                    'status': 'error',
+                    'message': 'Failed to get printer status',
+                    'details': result.stderr.strip()
+                }
+            
+            output = result.stdout.lower()
+            
+            # Check for errors across all printers
+            if 'jam' in output or 'paper jam' in output:
+                return {
+                    'status': 'paper_jam',
+                    'message': 'Paper jam detected on one or more printers',
+                    'details': 'Please clear the paper jam and try again'
+                }
+            elif 'offline' in output or 'stopped' in output:
+                return {
+                    'status': 'offline',
+                    'message': 'One or more printers are offline or stopped',
+                    'details': 'Please check printer connections and power'
+                }
+            elif 'error' in output:
+                return {
+                    'status': 'error',
+                    'message': 'Printer error detected',
+                    'details': output
+                }
+            else:
+                return {
+                    'status': 'ready',
+                    'message': 'Printers are ready',
+                    'details': 'Printers are available for printing'
+                }
+                
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f"Error checking all printers status: {e}",
                 'details': str(e)
             }
 

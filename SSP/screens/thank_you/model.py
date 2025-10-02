@@ -240,6 +240,7 @@ class ThankYouModel(QObject):
         
         Uses lpstat command to check if printer is idle/ready as a backup
         method in case print completion signals don't arrive.
+        Improved to handle multiple printers and detect active printer completion.
         """
         # Only check if we're still waiting
         if self.current_state != "waiting":
@@ -249,18 +250,37 @@ class ThankYouModel(QObject):
             result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True, timeout=5)
             
             if result.returncode == 0:
-                output = result.stdout.lower()
+                output = result.stdout
+                output_lower = output.lower()
                 
                 # Check for errors first
-                if 'jam' in output or 'paper jam' in output:
+                if 'jam' in output_lower or 'paper jam' in output_lower:
                     self.show_paper_jam_error("Paper jam detected during printing")
                     return
-                elif 'offline' in output or 'stopped' in output:
+                elif 'offline' in output_lower or 'stopped' in output_lower:
                     self.show_printing_error("Printer went offline during printing")
                     return
-                elif 'idle' in output or 'ready' in output:
-                    # Printer is idle, assume print completed
-                    print("Fallback: Printer idle, marking print as complete")
+                
+                # Check if any printer is actively printing
+                is_printing = False
+                active_printer = None
+                
+                for line in output.split('\n'):
+                    line = line.strip()
+                    if 'now printing' in line.lower():
+                        is_printing = True
+                        # Extract printer name from line like "printer HP_Smart_Tank_580_590_series_5E0E1D_USB now printing..."
+                        parts = line.split()
+                        for i, part in enumerate(parts):
+                            if part.lower() == 'printer' and i + 1 < len(parts):
+                                active_printer = parts[i + 1]
+                                break
+                        print(f"Fallback: Found active printer '{active_printer}' - still printing")
+                        break
+                
+                # If no printer is actively printing, assume completion
+                if not is_printing:
+                    print("Fallback: No printers actively printing, marking print as complete")
                     self._on_print_success()
                     
         except subprocess.TimeoutExpired:
