@@ -28,6 +28,7 @@ class ThankYouController(QWidget):
         self.model.status_updated.connect(self._update_status_display)
         self.model.redirect_to_idle.connect(self._go_to_idle)
         self.model.admin_override_requested.connect(self._show_admin_override_button)
+        self.model.admin_override_hidden.connect(self._hide_admin_override_button)
     
     def _finish_printing(self):
         """Handles the finish printing action."""
@@ -71,6 +72,11 @@ class ThankYouController(QWidget):
         """Shows the admin override button when an error occurs."""
         print("Thank you screen: Showing admin override button")
         self.view.show_admin_override_button()
+    
+    def _hide_admin_override_button(self):
+        """Hides the admin override button when error is resolved."""
+        print("Thank you screen: Hiding admin override button")
+        self.view.hide_admin_override_button()
     
     def _handle_admin_override(self):
         """Handles admin override button click - shows PIN dialog."""

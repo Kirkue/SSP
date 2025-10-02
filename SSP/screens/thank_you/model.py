@@ -34,6 +34,7 @@ class ThankYouModel(QObject):
     status_updated = pyqtSignal(str, str)
     redirect_to_idle = pyqtSignal()
     admin_override_requested = pyqtSignal()
+    admin_override_hidden = pyqtSignal()
     
     def __init__(self):
         """Initialize the Thank You model."""
@@ -80,6 +81,9 @@ class ThankYouModel(QObject):
             "Please wait while your document is being printed."
         )
         self.redirect_timer.stop()
+        
+        # Hide admin override button when starting new print job
+        self.admin_override_hidden.emit()
         
         # Connect to printer manager signals
         if hasattr(main_app, 'printer_manager'):
@@ -187,6 +191,8 @@ class ThankYouModel(QObject):
             "ADMIN OVERRIDE",
             "Returning to idle screen..."
         )
+        # Hide admin override button since override is being processed
+        self.admin_override_hidden.emit()
         # Short timer before redirecting
         self.redirect_timer.start(2000)
     
@@ -201,6 +207,9 @@ class ThankYouModel(QObject):
         
         if self.status_check_timer.isActive():
             self.status_check_timer.stop()
+        
+        # Hide admin override button since print succeeded
+        self.admin_override_hidden.emit()
         
         # Update state
         self.current_state = "completed"
