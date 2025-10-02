@@ -278,10 +278,13 @@ class ThankYouModel(QObject):
                         print(f"Fallback: Found active printer '{active_printer}' - still printing")
                         break
                 
-                # If no printer is actively printing, assume completion
+                # Only assume completion if no printer is actively printing
+                # This is the same logic as the main printer manager now uses
                 if not is_printing:
                     print("Fallback: No printers actively printing, marking print as complete")
                     self._on_print_success()
+                else:
+                    print(f"Fallback: Still waiting for printer '{active_printer}' to finish printing")
                     
         except subprocess.TimeoutExpired:
             print("⚠️ Fallback lpstat command timed out")

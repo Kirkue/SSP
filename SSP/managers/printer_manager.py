@@ -202,14 +202,14 @@ class PrinterThread(QThread):
 
     def wait_for_print_completion(self, job_id):
         """
-        Wait for print job to complete with active monitoring.
+        Wait for print job to complete by monitoring printer status.
         
-        Monitors the CUPS print queue and printer status every 2 seconds.
-        After job leaves queue, continues monitoring for 5 seconds to catch
-        delayed errors like paper jams.
+        Simply checks if any printer is actively printing using lpstat -p.
+        When no printer shows "now printing", considers the job complete.
+        Much simpler and more reliable than tracking individual job IDs.
         
         Args:
-            job_id: CUPS job ID to monitor
+            job_id: CUPS job ID (kept for compatibility, but not used)
             
         Returns:
             True if print job completed successfully, False otherwise
@@ -221,25 +221,31 @@ class PrinterThread(QThread):
         post_completion_wait = 5  # Wait 5 seconds after completion
         check_interval = 2
         elapsed_time = 0
-        job_completion_time = None
+        completion_time = None
+        
+        print(f"🖨️ Starting print completion monitoring (timeout: {max_wait_time}s)")
         
         while elapsed_time < max_wait_time:
             try:
-                # Check if job is still in CUPS queue
-                result = subprocess.run(['lpstat', '-o', job_id], 
-                                      capture_output=True, text=True)
+                # Check if any printer is actively printing
+                printer_result = subprocess.run(['lpstat', '-p'], 
+                                              capture_output=True, text=True)
+                printer_actively_printing = False
+                active_printer = None
                 
-                if result.returncode != 0 or not result.stdout.strip():
-                    # Job is no longer in queue
-                    if job_completion_time is None:
-                        job_completion_time = elapsed_time
-                        print(f"Print job completed after {elapsed_time}s, monitoring for {post_completion_wait}s...")
-                    else:
-                        # Check if post-completion monitoring is complete
-                        time_since_completion = elapsed_time - job_completion_time
-                        if time_since_completion >= post_completion_wait:
-                            print(f"✅ Print job successful")
-                            return True
+                if printer_result.returncode == 0:
+                    for line in printer_result.stdout.split('\n'):
+                        line = line.strip()
+                        if 'now printing' in line.lower():
+                            printer_actively_printing = True
+                            # Extract printer name
+                            parts = line.split()
+                            for i, part in enumerate(parts):
+                                if part.lower() == 'printer' and i + 1 < len(parts):
+                                    active_printer = parts[i + 1]
+                                    break
+                            print(f"🖨️ Printer '{active_printer}' still printing: {line}")
+                            break
                 
                 # Check for printer errors (paper jam, offline, etc.)
                 printer_status = self._check_printer_status()
@@ -259,6 +265,21 @@ class PrinterThread(QThread):
                     print(f"❌ Printer error: {printer_status['message']}")
                     self.print_failed.emit(f"Printer error: {printer_status['message']}")
                     return False
+                
+                # Simple completion logic: no printer actively printing
+                if not printer_actively_printing:
+                    # No printer is actively printing
+                    if completion_time is None:
+                        completion_time = elapsed_time
+                        print(f"✅ Print job completed after {elapsed_time}s, monitoring for {post_completion_wait}s...")
+                    else:
+                        # Check if post-completion monitoring is complete
+                        time_since_completion = elapsed_time - completion_time
+                        if time_since_completion >= post_completion_wait:
+                            print(f"✅ Print job successful - no printers actively printing")
+                            return True
+                else:
+                    print(f"⏳ Waiting for printer '{active_printer}' to finish printing...")
                     
                 time.sleep(check_interval)
                 elapsed_time += check_interval
