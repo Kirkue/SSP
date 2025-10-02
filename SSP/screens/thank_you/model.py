@@ -261,30 +261,24 @@ class ThankYouModel(QObject):
                     self.show_printing_error("Printer went offline during printing")
                     return
                 
-                # Check if any printer is actively printing
+                # Check if the specific target printer is actively printing
                 is_printing = False
-                active_printer = None
+                target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
                 
                 for line in output.split('\n'):
                     line = line.strip()
-                    if 'now printing' in line.lower():
+                    # Look specifically for our target printer with "now printing"
+                    if target_printer in line and 'now printing' in line.lower():
                         is_printing = True
-                        # Extract printer name from line like "printer HP_Smart_Tank_580_590_series_5E0E1D_USB now printing..."
-                        parts = line.split()
-                        for i, part in enumerate(parts):
-                            if part.lower() == 'printer' and i + 1 < len(parts):
-                                active_printer = parts[i + 1]
-                                break
-                        print(f"Fallback: Found active printer '{active_printer}' - still printing")
+                        print(f"Fallback: Target printer '{target_printer}' still printing: {line}")
                         break
                 
-                # Only assume completion if no printer is actively printing
-                # This is the same logic as the main printer manager now uses
+                # Only assume completion if target printer is not actively printing
                 if not is_printing:
-                    print("Fallback: No printers actively printing, marking print as complete")
+                    print("Fallback: Target printer not actively printing, marking print as complete")
                     self._on_print_success()
                 else:
-                    print(f"Fallback: Still waiting for printer '{active_printer}' to finish printing")
+                    print(f"Fallback: Still waiting for target printer '{target_printer}' to finish printing")
                     
         except subprocess.TimeoutExpired:
             print("⚠️ Fallback lpstat command timed out")

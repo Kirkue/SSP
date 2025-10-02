@@ -227,24 +227,19 @@ class PrinterThread(QThread):
         
         while elapsed_time < max_wait_time:
             try:
-                # Check if any printer is actively printing
+                # Check if the specific printer is actively printing
                 printer_result = subprocess.run(['lpstat', '-p'], 
                                               capture_output=True, text=True)
                 printer_actively_printing = False
-                active_printer = None
+                target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
                 
                 if printer_result.returncode == 0:
                     for line in printer_result.stdout.split('\n'):
                         line = line.strip()
-                        if 'now printing' in line.lower():
+                        # Look specifically for our target printer with "now printing"
+                        if target_printer in line and 'now printing' in line.lower():
                             printer_actively_printing = True
-                            # Extract printer name
-                            parts = line.split()
-                            for i, part in enumerate(parts):
-                                if part.lower() == 'printer' and i + 1 < len(parts):
-                                    active_printer = parts[i + 1]
-                                    break
-                            print(f"🖨️ Printer '{active_printer}' still printing: {line}")
+                            print(f"🖨️ Target printer '{target_printer}' still printing: {line}")
                             break
                 
                 # Check for printer errors (paper jam, offline, etc.)
