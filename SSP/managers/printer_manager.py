@@ -227,39 +227,58 @@ class PrinterThread(QThread):
         
         while elapsed_time < max_wait_time:
             try:
-                # Check if the specific printer is actively printing
-                printer_result = subprocess.run(['lpstat', '-p'], 
-                                              capture_output=True, text=True)
-                printer_actively_printing = False
+                # Check printer status using alerts-based detection
                 target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
+                printer_actively_printing = False
                 
-                if printer_result.returncode == 0:
-                    for line in printer_result.stdout.split('\n'):
+                # Get printer alerts to determine status
+                alerts_result = subprocess.run(['lpstat', '-l', '-p', target_printer], 
+                                             capture_output=True, text=True)
+                if alerts_result.returncode == 0:
+                    # Look for alerts line in the output
+                    for line in alerts_result.stdout.split('\n'):
                         line = line.strip()
-                        # Look specifically for our target printer with "now printing"
-                        if target_printer in line and 'now printing' in line.lower():
-                            printer_actively_printing = True
-                            print(f"🖨️ Target printer '{target_printer}' still printing: {line}")
+                        if line.startswith("Alerts:"):
+                            alerts_text = line.replace("Alerts:", "").strip()
+                            print(f"🔍 Printer alerts for {target_printer}: {alerts_text}")
+                            
+                            if alerts_text and alerts_text != "none":
+                                alerts_found = [alert.strip() for alert in alerts_text.split()]
+                                
+                                # Check if printer is actively printing (has cups-waiting-for-job-completed)
+                                if "cups-waiting-for-job-completed" in alerts_found:
+                                    printer_actively_printing = True
+                                    print(f"🖨️ Printer '{target_printer}' still processing/printing (cups-waiting-for-job-completed)")
+                                
+                                # Check for specific error conditions
+                                if "media-jam-error" in alerts_found or "paper-jam" in alerts_found:
+                                    print(f"❌ Paper jam detected on {target_printer}")
+                                    try:
+                                        send_paper_jam_sms()
+                                    except Exception as e:
+                                        print(f"⚠️ Failed to send SMS: {e}")
+                                    self.print_failed.emit(f"Paper jam detected on {target_printer}")
+                                    return False
+                                elif "media-empty-error" in alerts_found or "media-needed-error" in alerts_found:
+                                    print(f"❌ No paper detected on {target_printer}")
+                                    try:
+                                        send_paper_jam_sms()  # Using same SMS function for paper issues
+                                    except Exception as e:
+                                        print(f"⚠️ Failed to send SMS: {e}")
+                                    self.print_failed.emit(f"No paper detected on {target_printer}")
+                                    return False
+                                elif "offline" in alerts_found or "stopped" in alerts_found:
+                                    print(f"❌ Printer offline: {target_printer}")
+                                    self.print_failed.emit(f"Printer {target_printer} is offline")
+                                    return False
+                                elif "error" in alerts_found:
+                                    print(f"❌ Printer error detected on {target_printer}")
+                                    self.print_failed.emit(f"Printer error on {target_printer}")
+                                    return False
+                            else:
+                                # No alerts means printer is idle
+                                print(f"✅ Printer '{target_printer}' is idle (no alerts)")
                             break
-                
-                # Check for printer errors (paper jam, offline, etc.)
-                printer_status = self._check_printer_status()
-                if printer_status['status'] == 'paper_jam':
-                    print(f"❌ Paper jam detected: {printer_status['message']}")
-                    try:
-                        send_paper_jam_sms()
-                    except Exception as e:
-                        print(f"⚠️ Failed to send SMS: {e}")
-                    self.print_failed.emit(f"Paper jam detected: {printer_status['message']}")
-                    return False
-                elif printer_status['status'] == 'offline':
-                    print(f"❌ Printer offline: {printer_status['message']}")
-                    self.print_failed.emit(f"Printer offline: {printer_status['message']}")
-                    return False
-                elif printer_status['status'] == 'error':
-                    print(f"❌ Printer error: {printer_status['message']}")
-                    self.print_failed.emit(f"Printer error: {printer_status['message']}")
-                    return False
                 
                 # Simple completion logic: no printer actively printing
                 if not printer_actively_printing:

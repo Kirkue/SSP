@@ -253,25 +253,46 @@ class ThankYouModel(QObject):
                 output = result.stdout
                 output_lower = output.lower()
                 
-                # Check for errors first
-                if 'jam' in output_lower or 'paper jam' in output_lower:
-                    self.show_paper_jam_error("Paper jam detected during printing")
-                    return
-                elif 'offline' in output_lower or 'stopped' in output_lower:
-                    self.show_printing_error("Printer went offline during printing")
-                    return
-                
-                # Check if the specific target printer is actively printing
-                is_printing = False
+                # Check printer status using alerts-based detection (fallback method)
                 target_printer = "HP_Smart_Tank_580_590_series_5E0E1D_USB"
+                is_printing = False
                 
-                for line in output.split('\n'):
-                    line = line.strip()
-                    # Look specifically for our target printer with "now printing"
-                    if target_printer in line and 'now printing' in line.lower():
-                        is_printing = True
-                        print(f"Fallback: Target printer '{target_printer}' still printing: {line}")
-                        break
+                detailed_result = subprocess.run(['lpstat', '-l', '-p', target_printer], 
+                                               capture_output=True, text=True, timeout=5)
+                
+                if detailed_result.returncode == 0:
+                    # Look for alerts line in the output
+                    for line in detailed_result.stdout.split('\n'):
+                        line = line.strip()
+                        if line.startswith("Alerts:"):
+                            alerts_text = line.replace("Alerts:", "").strip()
+                            print(f"Fallback: Printer alerts for {target_printer}: {alerts_text}")
+                            
+                            if alerts_text and alerts_text != "none":
+                                alerts_found = [alert.strip() for alert in alerts_text.split()]
+                                
+                                # Check if printer is actively printing
+                                if "cups-waiting-for-job-completed" in alerts_found:
+                                    is_printing = True
+                                    print(f"Fallback: Printer '{target_printer}' still processing/printing (cups-waiting-for-job-completed)")
+                                
+                                # Check for specific error conditions
+                                if "media-jam-error" in alerts_found or "paper-jam" in alerts_found:
+                                    self.show_paper_jam_error(f"Paper jam detected on {target_printer}")
+                                    return
+                                elif "media-empty-error" in alerts_found or "media-needed-error" in alerts_found:
+                                    self.show_printing_error(f"No paper detected on {target_printer}")
+                                    return
+                                elif "offline" in alerts_found or "stopped" in alerts_found:
+                                    self.show_printing_error(f"Printer {target_printer} went offline")
+                                    return
+                                elif "error" in alerts_found:
+                                    self.show_printing_error(f"Printer error on {target_printer}")
+                                    return
+                            else:
+                                # No alerts means printer is idle
+                                print(f"Fallback: Printer '{target_printer}' is idle (no alerts)")
+                            break
                 
                 # Only assume completion if target printer is not actively printing
                 if not is_printing:
