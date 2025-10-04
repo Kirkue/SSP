@@ -651,27 +651,61 @@ class PaymentModel(QObject):
         print("Payment screen leaving")
         
         # Stop GPIO thread safely
-        if self.gpio_thread and self.gpio_thread.isRunning():
+        if hasattr(self, 'gpio_thread') and self.gpio_thread and self.gpio_thread.isRunning():
             print("Stopping GPIO thread...")
             self.gpio_thread.stop()
             if not self.gpio_thread.wait(2000):
                 print("Warning: GPIO thread did not stop gracefully")
                 self.gpio_thread.terminate()
                 self.gpio_thread.wait(1000)
-        
-        # Don't cleanup change dispenser immediately - it might still be dispensing
-        # The cleanup will happen when the dispensing thread completes
-        print("Payment screen: Skipping hopper cleanup - dispensing may still be in progress")
+            # Clear the thread reference
+            self.gpio_thread = None
         
         # Stop any running dispense thread
         if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
             print("Stopping dispense thread...")
             self.dispense_thread.terminate()
             self.dispense_thread.wait(1000)
+            # Clear the thread reference
+            self.dispense_thread = None
+        
+        # Don't cleanup change dispenser immediately - it might still be dispensing
+        # The cleanup will happen when the dispensing thread completes
+        print("Payment screen: Skipping hopper cleanup - dispensing may still be in progress")
     
+    def _log_partial_payment(self):
+        """Log partial payment when user cancels transaction."""
+        if self.amount_received > 0 and self.payment_data:
+            # Log cancelled transaction with partial payment
+            transaction_data = {
+                'file_name': os.path.basename(self.payment_data['pdf_data']['path']),
+                'pages': len(self.payment_data['selected_pages']),
+                'copies': self.payment_data['copies'],
+                'color_mode': self.payment_data['color_mode'],
+                'total_cost': self.total_cost,
+                'amount_paid': self.amount_received,
+                'change_given': 0,  # No change given since transaction cancelled
+                'status': 'cancelled_partial_payment'
+            }
+            self.db_manager.log_transaction(transaction_data)
+            
+            # Update cash inventory with received money (even though transaction cancelled)
+            for denomination, count in self.cash_received.items():
+                self.db_manager.update_cash_inventory(
+                    denomination=denomination, 
+                    count=count, 
+                    type='bill' if denomination >= 20 else 'coin'
+                )
+            
+            print(f"Logged cancelled transaction: {self.amount_received} received, {self.total_cost} required")
+
     def go_back(self):
         """Goes back to print options screen."""
         print("Payment screen: going back to print options")
+        
+        # Log partial payment if user received cash but cancelled
+        self._log_partial_payment()
+        
         self.on_leave()
         self.payment_data = None
         self.go_back_requested.emit()

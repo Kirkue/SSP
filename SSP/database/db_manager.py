@@ -78,11 +78,12 @@ class DatabaseManager:
         try:
             cursor = self.conn.cursor()
             cursor.execute("""
-                INSERT INTO transactions (file_name, pages, copies, color_mode, total_cost, amount_paid, change_given, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO transactions (timestamp, file_name, pages, copies, color_mode, total_cost, amount_paid, change_given, status, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                data['file_name'], data['pages'], data['copies'], data['color_mode'],
-                data['total_cost'], data['amount_paid'], data['change_given'], data['status']
+                datetime.now(), data['file_name'], data['pages'], data['copies'], data['color_mode'],
+                data['total_cost'], data['amount_paid'], data['change_given'], data['status'],
+                data.get('error_message', None)
             ))
             self.conn.commit()
         except sqlite3.Error as e:

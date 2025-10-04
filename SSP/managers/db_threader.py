@@ -80,6 +80,11 @@ class DatabaseThreadManager(QObject):
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1.0)
+        
+        # Close database connection if it exists
+        if hasattr(self, 'db_manager') and self.db_manager:
+            self.db_manager.close()
+            print("Database connection closed in thread manager")
     
     def _database_worker(self):
         """
@@ -124,7 +129,8 @@ class DatabaseThreadManager(QObject):
                 
                 # Log error to database
                 try:
-                    self.db_manager.log_error("Database Worker Error", str(e), "db_threader")
+                    from utils.error_logger import log_error
+                    log_error("Database Worker Error", str(e), "db_threader")
                 except Exception as db_error:
                     print(f"⚠️ Failed to log error to database: {db_error}")
                 

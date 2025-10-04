@@ -165,9 +165,8 @@ class ThankYouModel(QObject):
         
         # Log error to database
         try:
-            from database.db_manager import DatabaseManager
-            db = DatabaseManager()
-            db.log_error("Printing Error", message, "thank_you_screen")
+            from utils.error_logger import log_error
+            log_error("Printing Error", message, "thank_you_screen")
         except Exception as db_error:
             print(f"⚠️ Failed to log error to database: {db_error}")
         

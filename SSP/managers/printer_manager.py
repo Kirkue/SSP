@@ -174,9 +174,8 @@ class PrinterThread(QThread):
         
         # Log error to database
         try:
-            from database.db_manager import DatabaseManager
-            db = DatabaseManager()
-            db.log_error("Printing Error", error_message, "printer_manager")
+            from utils.error_logger import log_error
+            log_error("Printing Error", error_message, "printer_manager")
         except Exception as db_error:
             print(f"⚠️ Failed to log error to database: {db_error}")
         

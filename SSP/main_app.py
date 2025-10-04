@@ -317,9 +317,8 @@ class PrintingSystemApp(QMainWindow):
         
         # Log error to database
         try:
-            from database.db_manager import DatabaseManager
-            db = DatabaseManager()
-            db.log_error("Print Job Failed", error_message, "main_app")
+            from utils.error_logger import log_error
+            log_error("Print Job Failed", error_message, "main_app")
         except Exception as db_error:
             print(f"⚠️ Failed to log error to database: {db_error}")
         
@@ -353,6 +352,13 @@ class PrintingSystemApp(QMainWindow):
                 self.db_threader.stop()
             if hasattr(self, 'ink_analysis_threader'):
                 self.ink_analysis_threader.stop()
+            
+            # Clean up database connections
+            try:
+                from utils.error_logger import cleanup_db_connections
+                cleanup_db_connections()
+            except Exception as db_cleanup_error:
+                print(f"⚠️ Error cleaning up database connections: {db_cleanup_error}")
                 
         except Exception as e:
             print(f"❌ Error during cleanup: {e}")

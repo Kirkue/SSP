@@ -79,6 +79,11 @@ class InkAnalysisThreadManager(QObject):
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1.0)
+        
+        # Close database connection if it exists
+        if hasattr(self, 'db_manager') and self.db_manager:
+            self.db_manager.close()
+            print("Database connection closed in ink analysis thread manager")
     
     def _ink_analysis_worker(self):
         """
@@ -112,7 +117,8 @@ class InkAnalysisThreadManager(QObject):
                 
                 # Log error to database
                 try:
-                    self.db_manager.log_error("Ink Analysis Worker Error", str(e), "ink_analysis_threader")
+                    from utils.error_logger import log_error
+                    log_error("Ink Analysis Worker Error", str(e), "ink_analysis_threader")
                 except Exception as db_error:
                     print(f"⚠️ Failed to log error to database: {db_error}")
                 
