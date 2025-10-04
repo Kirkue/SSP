@@ -89,6 +89,15 @@ def init_db():
     ''')
     print("OK - Created cmyk_ink_levels table")
 
+    # Create Settings table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    )
+    ''')
+    print("OK - Created settings table")
+
     conn.commit()
     conn.close()
     print("OK - Database initialization complete")

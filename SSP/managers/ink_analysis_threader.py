@@ -109,6 +109,13 @@ class InkAnalysisThreadManager(QObject):
                 continue
             except Exception as e:
                 print(f"❌ Error in ink analysis worker: {e}")
+                
+                # Log error to database
+                try:
+                    self.db_manager.log_error("Ink Analysis Worker Error", str(e), "ink_analysis_threader")
+                except Exception as db_error:
+                    print(f"⚠️ Failed to log error to database: {db_error}")
+                
                 if operation and operation.callback:
                     operation.error = str(e)
                     operation.callback(operation)

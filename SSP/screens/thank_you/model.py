@@ -163,6 +163,14 @@ class ThankYouModel(QObject):
         except Exception as sms_error:
             print(f"⚠️ Failed to send SMS notification: {sms_error}")
         
+        # Log error to database
+        try:
+            from database.db_manager import DatabaseManager
+            db = DatabaseManager()
+            db.log_error("Printing Error", message, "thank_you_screen")
+        except Exception as db_error:
+            print(f"⚠️ Failed to log error to database: {db_error}")
+        
         # Show admin override button
         self.admin_override_requested.emit()
     

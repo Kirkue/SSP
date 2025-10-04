@@ -159,16 +159,27 @@ class PrinterThread(QThread):
 
     def _handle_print_error(self, error_message):
         """
-        Handle print errors with SMS notification.
+        Handle print errors with SMS notification and database logging.
         
         Args:
             error_message: Description of the error
         """
         print(f"❌ {error_message}")
+        
+        # Send SMS notification
         try:
             send_printing_error_sms(error_message)
         except Exception as sms_error:
             print(f"⚠️ Failed to send SMS notification: {sms_error}")
+        
+        # Log error to database
+        try:
+            from database.db_manager import DatabaseManager
+            db = DatabaseManager()
+            db.log_error("Printing Error", error_message, "printer_manager")
+        except Exception as db_error:
+            print(f"⚠️ Failed to log error to database: {db_error}")
+        
         self.print_failed.emit(error_message)
 
     def create_temp_pdf_with_selected_pages(self):

@@ -5,14 +5,14 @@ import os
 from datetime import datetime
 
 class DatabaseManager:
-    def __init__(self, db_name="piso_print.db"):
-        # Ensure the database directory exists
-        db_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+    def __init__(self, db_name="ssp_database.db"):
+        # Use the same database file as models.py
+        db_dir = os.path.join(os.path.dirname(__file__))
         os.makedirs(db_dir, exist_ok=True)
         self.db_path = os.path.join(db_dir, db_name)
         self.conn = None
         self.connect()
-        self.create_tables()
+        # Remove create_tables() call since models.py handles initialization
 
     def connect(self):
         """Establish a connection to the SQLite database."""
@@ -34,68 +34,7 @@ class DatabaseManager:
             d[col[0]] = row[idx]
         return d
 
-    def create_tables(self):
-        """Create database tables if they don't exist."""
-        if not self.conn:
-            return
-        try:
-            cursor = self.conn.cursor()
-            # Transactions Table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS transactions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    file_name TEXT NOT NULL,
-                    pages INTEGER NOT NULL,
-                    copies INTEGER NOT NULL,
-                    color_mode TEXT NOT NULL,
-                    total_cost REAL NOT NULL,
-                    amount_paid REAL NOT NULL,
-                    change_given REAL NOT NULL,
-                    status TEXT NOT NULL
-                )
-            """)
-            # Cash Inventory Table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS cash_inventory (
-                    denomination INTEGER PRIMARY KEY,
-                    count INTEGER NOT NULL DEFAULT 0,
-                    type TEXT NOT NULL, -- 'coin' or 'bill'
-                    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            # Error Log Table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS error_log (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    error_type TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    context TEXT
-                )
-            """)
-            # --- NEW: Settings Table ---
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                )
-            """)
-            # --- NEW: CMYK Ink Levels Table ---
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS cmyk_ink_levels (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME NOT NULL,
-                    cyan_level REAL NOT NULL,
-                    magenta_level REAL NOT NULL,
-                    yellow_level REAL NOT NULL,
-                    black_level REAL NOT NULL,
-                    last_updated DATETIME NOT NULL
-                )
-            """)
-            self.conn.commit()
-        except sqlite3.Error as e:
-            print(f"Error creating tables: {e}")
+    # create_tables() method removed - database initialization is handled by models.py
 
     # --- NEW: get_setting method ---
     def get_setting(self, key, default=None):
@@ -195,8 +134,8 @@ class DatabaseManager:
         try:
             cursor = self.conn.cursor()
             cursor.execute(
-                "INSERT INTO error_log (error_type, message, context) VALUES (?, ?, ?)",
-                (error_type, message, context)
+                "INSERT INTO error_log (timestamp, error_type, error_message, screen_name, resolved) VALUES (?, ?, ?, ?, ?)",
+                (datetime.now(), error_type, message, context, False)
             )
             self.conn.commit()
         except sqlite3.Error as e:
@@ -230,7 +169,7 @@ class DatabaseManager:
             cursor.execute("""
                 SELECT denomination, count 
                 FROM cash_inventory 
-                WHERE type = 'coin' AND denomination IN (1, 5)
+                WHERE type = 'coin' AND denomination IN (1.0, 5.0)
             """)
             coins = {row['denomination']: row['count'] for row in cursor.fetchall()}
             
@@ -238,8 +177,8 @@ class DatabaseManager:
             status = {
                 "paper_count": paper_count,
                 "coins": {
-                    "peso_1": coins.get(1, 0),
-                    "peso_5": coins.get(5, 0)
+                    "peso_1": coins.get(1.0, 0),
+                    "peso_5": coins.get(5.0, 0)
                 },
                 "warnings": []
             }
@@ -247,9 +186,9 @@ class DatabaseManager:
             # Add warnings based on thresholds
             if paper_count < 20:
                 status["warnings"].append("Low paper level!")
-            if coins.get(1, 0) < 50:
+            if coins.get(1.0, 0) < 50:
                 status["warnings"].append("Low on ₱1 coins!")
-            if coins.get(5, 0) < 20:
+            if coins.get(5.0, 0) < 20:
                 status["warnings"].append("Low on ₱5 coins!")
                 
             return status
@@ -379,8 +318,8 @@ class DatabaseManager:
             status = {
                 "paper_count": paper_count,
                 "coins": {
-                    "peso_1": coins.get(1, 0),
-                    "peso_5": coins.get(5, 0)
+                    "peso_1": coins.get(1.0, 0),
+                    "peso_5": coins.get(5.0, 0)
                 },
                 "cmyk_levels": cmyk_levels,
                 "warnings": []
@@ -389,9 +328,9 @@ class DatabaseManager:
             # Add warnings based on thresholds
             if paper_count < 20:
                 status["warnings"].append("Low paper level!")
-            if coins.get(1, 0) < 50:
+            if coins.get(1.0, 0) < 50:
                 status["warnings"].append("Low on ₱1 coins!")
-            if coins.get(5, 0) < 20:
+            if coins.get(5.0, 0) < 20:
                 status["warnings"].append("Low on ₱5 coins!")
             
             # Add CMYK ink warnings

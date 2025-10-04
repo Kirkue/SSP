@@ -299,7 +299,7 @@ class PrintingSystemApp(QMainWindow):
         """
         Handle print job failure.
         
-        Sends SMS notification for print failures and displays appropriate
+        Sends SMS notification for print failures, logs to database, and displays appropriate
         error message on the thank you screen. Distinguishes between paper
         jam errors and general printing errors.
         
@@ -314,6 +314,14 @@ class PrintingSystemApp(QMainWindow):
             send_printing_error_sms(error_message)
         except Exception as sms_error:
             print(f"⚠️ Failed to send SMS notification: {sms_error}")
+        
+        # Log error to database
+        try:
+            from database.db_manager import DatabaseManager
+            db = DatabaseManager()
+            db.log_error("Print Job Failed", error_message, "main_app")
+        except Exception as db_error:
+            print(f"⚠️ Failed to log error to database: {db_error}")
         
         # Display error on thank you screen
         if self.stacked_widget.currentWidget() == self.thank_you_screen:
