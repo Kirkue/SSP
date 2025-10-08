@@ -136,6 +136,10 @@ class ThankYouModel(QObject):
         """
         self.current_state = "error"
         
+        # Stop any existing safety timeout since we're now in error state
+        if self.redirect_timer.isActive():
+            self.redirect_timer.stop()
+        
         # Check if this is a paper jam error
         is_paper_jam = "paper jam" in message.lower() or "jam" in message.lower()
         
@@ -182,6 +186,10 @@ class ThankYouModel(QObject):
         """
         self.current_state = "error"
         self.error_type = "paper_jam"
+        
+        # Stop any existing safety timeout since we're now in error state
+        if self.redirect_timer.isActive():
+            self.redirect_timer.stop()
         
         self.status_updated.emit(
             "PAPER JAM DETECTED",
@@ -327,8 +335,11 @@ class ThankYouModel(QObject):
         # Start periodic printer status check as fallback (every 5 seconds)
         self.status_check_timer.start(5000)
         
-        # Start safety timeout (2 minutes)
-        self.redirect_timer.start(120000)
+        # Only start safety timeout if not in error state
+        # Error states should wait for admin override, not auto-redirect
+        if self.current_state not in ["error", "admin_override"]:
+            # Start safety timeout (2 minutes) only for non-error states
+            self.redirect_timer.start(120000)
     
     def _on_print_failed(self, error_message):
         """
