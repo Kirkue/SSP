@@ -30,10 +30,6 @@ class FileBrowserController(QWidget):
         self.view.continue_button_clicked.connect(self._continue_to_payment)
         self.view.pdf_button_clicked.connect(self.model.select_pdf)
         
-        # --- New signals for PDF preview controls ---
-        self.view.zoom_in_clicked.connect(self._zoom_in)
-        self.view.zoom_out_clicked.connect(self._zoom_out)
-        self.view.zoom_reset_clicked.connect(self._zoom_reset)
         self.view.single_page_clicked.connect(self._set_single_page_view)
         self.view.multipage_clicked.connect(self._set_multipage_view)
         self.view.select_all_clicked.connect(self._select_all_pages)

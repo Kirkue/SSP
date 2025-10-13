@@ -196,8 +196,8 @@ class USBScreenView(QWidget):
         """Returns the style for the cancel button."""
         return """
             QPushButton { 
-                background-color: #c82333; color: white; font-size: 14px;
+                background-color: #ff0000; color: white; font-size: 14px;
                 border: none; border-radius: 6px; padding: 10px 20px;
             }
-            QPushButton:hover { background-color: #a51c2a; }
+            QPushButton:hover { background-color: #ffb84d; }
         """

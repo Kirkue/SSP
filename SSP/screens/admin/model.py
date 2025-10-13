@@ -37,6 +37,24 @@ class AdminModel(QObject):
         print("Paper count reset to 100, SMS alert flag reset.")
         self.load_paper_count() # Reload to emit signal
 
+    def increase_paper_count(self):
+        """Increases the paper count by 1."""
+        if self.paper_count < 100:
+            self.paper_count += 1
+            self.db_manager.update_setting('paper_count', self.paper_count)
+            color = self._get_color_for_count(self.paper_count)
+            self.paper_count_changed.emit(self.paper_count, color)
+            print(f"Paper count increased to {self.paper_count}")
+
+    def decrease_paper_count(self):
+        """Decreases the paper count by 1."""
+        if self.paper_count > 0:
+            self.paper_count -= 1
+            self.db_manager.update_setting('paper_count', self.paper_count)
+            color = self._get_color_for_count(self.paper_count)
+            self.paper_count_changed.emit(self.paper_count, color)
+            print(f"Paper count decreased to {self.paper_count}")
+
     def update_paper_count_from_string(self, count_str: str):
         """Validates and updates the paper count from user input string."""
         try:
@@ -150,6 +168,78 @@ class AdminModel(QObject):
         self.db_manager.update_cash_inventory(5, 50, 'coin')   # Default 50 ₱5 coins
         self.load_coin_counts()
         print("Coin counts reset to defaults: ₱1=100, ₱5=50")
+
+    def increase_coin_1_count(self):
+        """Increases the ₱1 coin count by 1."""
+        try:
+            inventory = self.db_manager.get_cash_inventory()
+            current_count = 0
+            for item in inventory:
+                if item['denomination'] == 1 and item['type'] == 'coin':
+                    current_count = item['count']
+                    break
+            
+            if current_count < 1000:  # Max limit
+                new_count = current_count + 1
+                self.db_manager.update_cash_inventory(1, new_count, 'coin')
+                self.load_coin_counts()
+                print(f"₱1 coin count increased to {new_count}")
+        except Exception as e:
+            print(f"Error increasing ₱1 coin count: {e}")
+
+    def decrease_coin_1_count(self):
+        """Decreases the ₱1 coin count by 1."""
+        try:
+            inventory = self.db_manager.get_cash_inventory()
+            current_count = 0
+            for item in inventory:
+                if item['denomination'] == 1 and item['type'] == 'coin':
+                    current_count = item['count']
+                    break
+            
+            if current_count > 0:  # Min limit
+                new_count = current_count - 1
+                self.db_manager.update_cash_inventory(1, new_count, 'coin')
+                self.load_coin_counts()
+                print(f"₱1 coin count decreased to {new_count}")
+        except Exception as e:
+            print(f"Error decreasing ₱1 coin count: {e}")
+
+    def increase_coin_5_count(self):
+        """Increases the ₱5 coin count by 1."""
+        try:
+            inventory = self.db_manager.get_cash_inventory()
+            current_count = 0
+            for item in inventory:
+                if item['denomination'] == 5 and item['type'] == 'coin':
+                    current_count = item['count']
+                    break
+            
+            if current_count < 1000:  # Max limit
+                new_count = current_count + 1
+                self.db_manager.update_cash_inventory(5, new_count, 'coin')
+                self.load_coin_counts()
+                print(f"₱5 coin count increased to {new_count}")
+        except Exception as e:
+            print(f"Error increasing ₱5 coin count: {e}")
+
+    def decrease_coin_5_count(self):
+        """Decreases the ₱5 coin count by 1."""
+        try:
+            inventory = self.db_manager.get_cash_inventory()
+            current_count = 0
+            for item in inventory:
+                if item['denomination'] == 5 and item['type'] == 'coin':
+                    current_count = item['count']
+                    break
+            
+            if current_count > 0:  # Min limit
+                new_count = current_count - 1
+                self.db_manager.update_cash_inventory(5, new_count, 'coin')
+                self.load_coin_counts()
+                print(f"₱5 coin count decreased to {new_count}")
+        except Exception as e:
+            print(f"Error decreasing ₱5 coin count: {e}")
 
     def decrement_coins(self, peso_1_needed: int, peso_5_needed: int) -> bool:
         """Decrements coin counts for change dispensing. Returns True on success."""

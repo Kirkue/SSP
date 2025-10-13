@@ -33,7 +33,7 @@ class PinDialogView(QDialog):
         # --- Status Label for messages ---
         self.status_label = QLabel("Enter PIN")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("font-size: 14px; color: #aaa;")
+        self.status_label.setStyleSheet("font-size: 14px; color: #36454F;")
 
         main_layout.addWidget(self.pin_display)
         main_layout.addWidget(self.status_label)
@@ -78,27 +78,28 @@ class PinDialogView(QDialog):
         """Returns the main dialog style."""
         return """
             QDialog {
-                background-color: #1f1f38;
-                border: 2px solid #4a4a6a;
+                background-color: white;
+                border: 4px solid #1e440a;
+                border-radius: 10px;
             }
             QLabel {
-                color: white;
+                color: #36454F;
                 font-size: 18px;
             }
             QPushButton {
-                background-color: #2a2a4a;
-                color: white;
+                background-color: white;
+                color: #36454F;
                 font-size: 24px;
                 font-weight: bold;
-                border: 1px solid #444;
+                border: 4px solid #1e440a;
                 border-radius: 8px;
                 min-height: 60px;
             }
             QPushButton:hover {
-                background-color: #3a3a5a;
+                background-color: #f0f0f0;
             }
             QPushButton:pressed {
-                background-color: #1a1a3a;
+                background-color: #e0e0e0;
             }
         """
     
@@ -106,18 +107,39 @@ class PinDialogView(QDialog):
         """Returns the PIN display style."""
         return """
             QLabel {
-                background-color: #101020;
-                border: 1px solid #444;
+                background-color: white;
+                border: 4px solid #1e440a;
                 border-radius: 8px;
                 font-size: 32px;
                 padding: 5px;
+                color: #36454F;
             }
         """
     
     def get_clear_button_style(self):
         """Returns the clear button style."""
-        return "background-color: #804d4d;"
+        return """
+            QPushButton {
+                background-color: #ff0000;
+                color: white;
+                border: 4px solid #ff0000;
+            }
+            QPushButton:hover {
+                background-color: #ffb84d;
+                border: 4px solid #ffb84d;
+            }
+        """
     
     def get_enter_button_style(self):
         """Returns the enter button style."""
-        return "background-color: #4CAF50;"
+        return """
+            QPushButton {
+                background-color: #1e440a;
+                color: white;
+                border: 4px solid #1e440a;
+            }
+            QPushButton:hover {
+                background-color: #2a5d1a;
+                border: 4px solid #2a5d1a;
+            }
+        """

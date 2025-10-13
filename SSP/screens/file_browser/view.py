@@ -3,8 +3,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QScrollArea,
     QFrame, QMessageBox, QGridLayout, QCheckBox, QSizePolicy, QStackedLayout, QSpacerItem
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QThread
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QPoint
+from PyQt5.QtGui import QPixmap, QImage, QWheelEvent, QMouseEvent, QTouchEvent
 from .pdf_preview_widget import PDFPreviewWidget
 
 try:
@@ -17,8 +17,77 @@ except ImportError:
 def get_base_dir():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
+class DragScrollArea(QScrollArea):
+    """Custom scroll area that supports mouse drag scrolling."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.dragging = False
+        self.last_drag_position = QPoint()
+        self.setMouseTracking(True)
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.dragging = True
+            self.last_drag_position = event.globalPos()
+            self.setCursor(Qt.ClosedHandCursor)
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if self.dragging and event.buttons() == Qt.LeftButton:
+            delta = event.globalPos() - self.last_drag_position
+            # More responsive scrolling for touch screens
+            scroll_value = self.verticalScrollBar().value() - delta.y()
+            self.verticalScrollBar().setValue(scroll_value)
+            self.last_drag_position = event.globalPos()
+        super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.dragging = False
+            self.setCursor(Qt.ArrowCursor)
+        super().mouseReleaseEvent(event)
+    
+    def wheelEvent(self, event):
+        """Handle mouse wheel scrolling."""
+        delta = event.angleDelta().y()
+        scroll_amount = delta // 8  # Adjust scroll sensitivity
+        self.verticalScrollBar().setValue(
+            self.verticalScrollBar().value() - scroll_amount
+        )
+        event.accept()
+    
+    def enterEvent(self, event):
+        """Change cursor when entering the scroll area."""
+        if not self.dragging:
+            self.setCursor(Qt.OpenHandCursor)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Reset cursor when leaving the scroll area."""
+        if not self.dragging:
+            self.setCursor(Qt.ArrowCursor)
+        super().leaveEvent(event)
+    
+    def touchEvent(self, event):
+        """Handle touch events for touch screens."""
+        if event.touchPoints():
+            touch_point = event.touchPoints()[0]
+            if event.type() == QTouchEvent.TouchBegin:
+                self.dragging = True
+                self.last_drag_position = touch_point.pos().toPoint()
+            elif event.type() == QTouchEvent.TouchUpdate and self.dragging:
+                delta = touch_point.pos().toPoint() - self.last_drag_position
+                scroll_value = self.verticalScrollBar().value() - delta.y()
+                self.verticalScrollBar().setValue(scroll_value)
+                self.last_drag_position = touch_point.pos().toPoint()
+            elif event.type() == QTouchEvent.TouchEnd:
+                self.dragging = False
+        event.accept()
+
 class PDFButton(QPushButton):
     pdf_selected = pyqtSignal(dict)
+    
     def __init__(self, pdf_data):
         super().__init__()
         self.pdf_data = pdf_data
@@ -79,10 +148,26 @@ class PDFPageWidget(QFrame):
         self.checkbox = QCheckBox(f"Page {self.page_num}")
         self.checkbox.setChecked(checked)
         self.checkbox.setStyleSheet("""
-            QCheckBox { color: #36454F; font-size: 12px; }
-            QCheckBox::indicator { width: 14px; height: 14px; }
-            QCheckBox::indicator:checked { background-color: #4CAF50; border: 2px solid #4CAF50; }
-            QCheckBox::indicator:unchecked { background-color: white; border: 2px solid #ccc; }
+            QCheckBox { 
+                color: #36454F; 
+                font-size: 14px; 
+                font-weight: bold;
+                padding: 8px;
+                min-height: 30px;
+            }
+            QCheckBox::indicator { 
+                width: 20px; 
+                height: 20px; 
+                border-radius: 4px;
+            }
+            QCheckBox::indicator:checked { 
+                background-color: #4CAF50; 
+                border: 2px solid #4CAF50; 
+            }
+            QCheckBox::indicator:unchecked { 
+                background-color: white; 
+                border: 2px solid #ccc; 
+            }
         """)
         self.checkbox.clicked.connect(self.on_checkbox_clicked)
         self.preview_label = QLabel()
@@ -156,15 +241,12 @@ class FileBrowserView(QWidget):
     
     SINGLE_PAGE_PREVIEW_WIDTH = 280
     SINGLE_PAGE_PREVIEW_HEIGHT = 380
-    ITEMS_PER_GRID_PAGE = 6
+    ITEMS_PER_GRID_PAGE = 4
 
     # Signals for user interactions
     back_button_clicked = pyqtSignal()
     continue_button_clicked = pyqtSignal()
     pdf_button_clicked = pyqtSignal(dict)  # pdf_data
-    zoom_in_clicked = pyqtSignal()
-    zoom_out_clicked = pyqtSignal()
-    zoom_reset_clicked = pyqtSignal()
     single_page_clicked = pyqtSignal()
     multipage_clicked = pyqtSignal()
     select_all_clicked = pyqtSignal()
@@ -230,21 +312,109 @@ class FileBrowserView(QWidget):
         self.file_header.setStyleSheet("QLabel { color: #36454F; font-size: 16px; font-weight: bold; background-color: transparent; padding-left: 13px;}")
         self.file_header.setFixedHeight(32)
         left_layout.addWidget(self.file_header, 0, Qt.AlignLeft)
+        # File list container with scroll area and navigation buttons
+        file_container = QWidget()
+        file_container.setStyleSheet("background-color: transparent;")
+        file_container_layout = QVBoxLayout(file_container)
+        file_container_layout.setContentsMargins(0, 0, 0, 0)
+        file_container_layout.setSpacing(5)
+        
+        # Up button (hidden since we're using scroll bar)
+        self.file_up_btn = QPushButton("▲ Previous Files")
+        self.file_up_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1e440a;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                font-weight: bold;
+                margin: 2px;
+            }
+            QPushButton:hover {
+                background-color: #2a5d1a;
+            }
+            QPushButton:disabled {
+                background-color: #666666;
+                color: #999999;
+            }
+        """)
+        self.file_up_btn.setFixedHeight(60)
+        self.file_up_btn.setEnabled(False)
+        self.file_up_btn.hide()  # Hide since we're using scroll bar
+        file_container_layout.addWidget(self.file_up_btn)
+        
+        # Scroll area for file list
         file_scroll = QScrollArea()
         file_scroll.setWidgetResizable(True)
         file_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        file_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         file_scroll.setStyleSheet("""
-            QScrollArea { border: none; background-color: transparent; }
-            QScrollBar:vertical { background-color: #333; width: 12px; border-radius: 6px; }
-            QScrollBar::handle:vertical { background-color: #666; border-radius: 6px; min-height: 20px; }
+            QScrollArea { 
+                border: none; 
+                background-color: transparent; 
+            }
+            QScrollBar:vertical { 
+                background-color: #333; 
+                width: 16px; 
+                border-radius: 8px; 
+                margin: 2px;
+                border: none;
+            }
+            QScrollBar::handle:vertical { 
+                background-color: #666; 
+                border-radius: 8px; 
+                min-height: 30px; 
+                margin: 2px;
+                border: none;
+            }
+            QScrollBar::handle:vertical:hover { 
+                background-color: #888; 
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
         """)
+        
+        # File list widget
         self.file_list_widget = QWidget()
         self.file_list_widget.setStyleSheet("background-color: transparent;")
+        self.file_list_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.file_list_layout = QVBoxLayout(self.file_list_widget)
-        self.file_list_layout.setSpacing(6)
+        self.file_list_layout.setContentsMargins(5, 5, 5, 5)
+        self.file_list_layout.setSpacing(8)
         self.file_list_layout.addStretch()
         file_scroll.setWidget(self.file_list_widget)
-        left_layout.addWidget(file_scroll)
+        file_container_layout.addWidget(file_scroll)
+        
+        # Down button (hidden since we're using scroll bar)
+        self.file_down_btn = QPushButton("▼ More Files")
+        self.file_down_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1e440a;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                font-weight: bold;
+                margin: 2px;
+            }
+            QPushButton:hover {
+                background-color: #2a5d1a;
+            }
+            QPushButton:disabled {
+                background-color: #666666;
+                color: #999999;
+            }
+        """)
+        self.file_down_btn.setFixedHeight(60)
+        self.file_down_btn.setEnabled(False)
+        self.file_down_btn.hide()  # Hide since we're using scroll bar
+        file_container_layout.addWidget(self.file_down_btn)
+        
+        left_layout.addWidget(file_container)
         split_row.addWidget(left_panel)
 
         # RIGHT PANEL
@@ -350,34 +520,12 @@ class FileBrowserView(QWidget):
         self.next_page_btn.setFixedHeight(button_height)
         self.page_input = QLabel("1")
         self.page_input.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 13px; min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; }")
-        zoom_btn_style = nav_btn_style
-        self.zoom_in_btn = QPushButton("+")
-        self.zoom_in_btn.setStyleSheet(zoom_btn_style)
-        self.zoom_in_btn.setFixedHeight(button_height)
-        self.zoom_out_btn = QPushButton("−")
-        self.zoom_out_btn.setStyleSheet(zoom_btn_style)
-        self.zoom_out_btn.setFixedHeight(button_height)
-        self.zoom_reset_btn = QPushButton("⌂")
-        self.zoom_reset_btn.setStyleSheet(zoom_btn_style)
-        self.zoom_reset_btn.setFixedHeight(button_height)
-        self.zoom_label = QLabel("100%")
-        self.zoom_label.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 12px; min-width: 45px; max-width: 45px; border-radius: 3px; padding: 2px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; margin: 0 5px; }")
         nav_layout.addWidget(self.prev_page_btn)
         nav_layout.addWidget(self.page_input)
         nav_layout.addWidget(self.next_page_btn)
         nav_layout.addStretch()
-        zoom_label_container = QLabel("Zoom:")
-        zoom_label_container.setStyleSheet("background-color: transparent; color: #36454F; font-weight: bold;")
-        nav_layout.addWidget(zoom_label_container)
-        nav_layout.addWidget(self.zoom_out_btn)
-        nav_layout.addWidget(self.zoom_label)
-        nav_layout.addWidget(self.zoom_in_btn)
-        nav_layout.addWidget(self.zoom_reset_btn)
         self.prev_page_btn.clicked.connect(self.prev_page_clicked.emit)
         self.next_page_btn.clicked.connect(self.next_page_clicked.emit)
-        self.zoom_in_btn.clicked.connect(self.zoom_in_clicked.emit)
-        self.zoom_out_btn.clicked.connect(self.zoom_out_clicked.emit)
-        self.zoom_reset_btn.clicked.connect(self.zoom_reset_clicked.emit)
         self.single_page_layout.addLayout(nav_layout)
         self.single_page_checkbox = QCheckBox("Select this page")
         self.single_page_checkbox.setStyleSheet("QCheckBox { color: #36454F; font-size: 13px; background-color: transparent; }")
@@ -483,16 +631,21 @@ class FileBrowserView(QWidget):
             pdf_btn.pdf_selected.connect(self.pdf_button_clicked.emit)
             self.pdf_buttons.append(pdf_btn)
             self.file_list_layout.insertWidget(self.file_list_layout.count() - 1, pdf_btn)
-        self.selected_pdf = None
-        self.selected_pages = None
-        self.clear_preview()
-        self.page_info.setText("Select a PDF to preview pages")
-        self.preview_header.setText("Select a PDF file to preview pages")
-        self.prev_grid_page_btn.hide()
-        self.grid_page_label.hide()
-        self.next_grid_page_btn.hide()
-        if self.pdf_files_data: 
-            self.select_pdf(self.pdf_files_data[0])
+        
+        # Automatically select the first file if available
+        if self.pdf_files_data:
+            first_pdf = self.pdf_files_data[0]
+            self.selected_pdf = first_pdf
+            self.selected_pages = None
+            # Emit the signal to trigger preview loading
+            self.pdf_button_clicked.emit(first_pdf)
+        else:
+            self.selected_pdf = None
+            self.selected_pages = None
+            self.clear_preview()
+            self.page_info.setText("Select a PDF to preview pages")
+            self.preview_header.setText("Select a PDF file to preview pages")
+    
 
     def clear_file_list(self):
         """Clears the file list."""
@@ -553,8 +706,8 @@ class FileBrowserView(QWidget):
             page_widget.page_checkbox_clicked.connect(self.page_checkbox_clicked.emit)
             self.page_widgets.append(page_widget)
             self.page_widget_map[page_num] = page_widget
-            # Add widgets to rows 1 and 2 to account for top stretch
-            self.preview_layout.addWidget(page_widget, (i // 3) + 1, (i % 3) + 1)
+            # Add widgets to rows 1 and 2 to account for top stretch (2x2 grid)
+            self.preview_layout.addWidget(page_widget, (i // 2) + 1, (i % 2) + 1)
             
         if PYMUPDF_AVAILABLE:
             self.preview_thread = PDFPreviewThread(self.selected_pdf['path'], pages_to_show)
@@ -604,7 +757,6 @@ class FileBrowserView(QWidget):
         self.single_page_checkbox.blockSignals(True)
         self.single_page_checkbox.setChecked(self.selected_pages.get(page_num, False))
         self.single_page_checkbox.blockSignals(False)
-        self.update_zoom_label()
         self.single_page_preview.clear()
         if PYMUPDF_AVAILABLE:
             try:

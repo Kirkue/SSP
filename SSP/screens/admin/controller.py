@@ -1,5 +1,6 @@
 # screens/admin/controller.py
 
+import os
 from PyQt5.QtWidgets import QWidget, QGridLayout
 
 from .model import AdminModel
@@ -12,7 +13,9 @@ class AdminController(QWidget):
         self.main_app = main_app
 
         self.model = AdminModel()
-        self.view = AdminScreenView()
+        # Pass the background image path to the view
+        background_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets', 'admin_panel_screen background.png')
+        self.view = AdminScreenView(background_path)
         
         # Connect to database thread manager if available
         if hasattr(main_app, 'db_threader'):
@@ -36,10 +39,13 @@ class AdminController(QWidget):
         # --- View -> Controller/Model ---
         self.view.back_clicked.connect(self._go_back)
         self.view.view_data_logs_clicked.connect(self._show_data_viewer)
+        self.view.paper_decreased.connect(self.model.decrease_paper_count)
+        self.view.paper_increased.connect(self.model.increase_paper_count)
         self.view.reset_paper_clicked.connect(self.model.reset_paper_count)
-        self.view.update_paper_clicked.connect(self.model.update_paper_count_from_string)
-        self.view.update_coin_1_clicked.connect(self.model.update_coin_1_count)
-        self.view.update_coin_5_clicked.connect(self.model.update_coin_5_count)
+        self.view.coin_1_decreased.connect(self.model.decrease_coin_1_count)
+        self.view.coin_1_increased.connect(self.model.increase_coin_1_count)
+        self.view.coin_5_decreased.connect(self.model.decrease_coin_5_count)
+        self.view.coin_5_increased.connect(self.model.increase_coin_5_count)
         self.view.reset_coins_clicked.connect(self.model.reset_coin_counts)
         self.view.update_cmyk_clicked.connect(self.model.update_cmyk_levels)
         self.view.reset_cmyk_clicked.connect(self.model.reset_cmyk_levels)

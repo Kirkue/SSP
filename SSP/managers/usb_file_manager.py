@@ -53,10 +53,13 @@ class USBFileManager:
             drives = win32api.GetLogicalDriveStrings()
             drives = drives.split('\000')[:-1]
             
+            print(f"Checking {len(drives)} drives: {drives}")
+            
             for drive in drives:
                 try:
                     # Check if it's a removable drive
                     drive_type = win32file.GetDriveType(drive)
+                    print(f"Drive {drive} type: {drive_type}")
                     
                     # DRIVE_REMOVABLE = 2 (floppy, USB, etc.)
                     if drive_type == 2:
@@ -66,17 +69,23 @@ class USBFileManager:
                                 # Try to access the drive to make sure it's ready
                                 os.listdir(drive)
                                 usb_drives.append(drive)
-                                print(f"Found removable USB drive: {drive}")
-                            except (OSError, PermissionError):
-                                print(f"USB drive {drive} not ready or accessible")
+                                print(f"✅ Found removable USB drive: {drive}")
+                            except (OSError, PermissionError) as e:
+                                print(f"❌ USB drive {drive} not ready or accessible: {e}")
+                    else:
+                        print(f"Drive {drive} is not removable (type: {drive_type})")
                                 
                 except Exception as e:
                     print(f"Error checking drive {drive}: {e}")
                     continue
                     
         except ImportError:
-            print("pywin32 not available, using fallback method")
+            print("❌ pywin32 not available, using fallback method")
             # Fallback method using psutil
+            usb_drives = self._get_usb_drives_fallback()
+        except Exception as e:
+            print(f"❌ Error in Windows USB detection: {e}")
+            # Try fallback method
             usb_drives = self._get_usb_drives_fallback()
             
         return usb_drives
@@ -149,10 +158,24 @@ class USBFileManager:
         
         try:
             partitions = psutil.disk_partitions()
+            print(f"Fallback method: Checking {len(partitions)} partitions")
             
             for partition in partitions:
-                # Only check drives that are explicitly marked as removable
-                if 'removable' in partition.opts:
+                print(f"Partition: {partition.device} -> {partition.mountpoint} (opts: {partition.opts})")
+                
+                # Check for removable drives
+                is_removable = 'removable' in partition.opts
+                
+                # Also check for common USB drive characteristics
+                is_likely_usb = (
+                    'removable' in partition.opts or
+                    partition.fstype in ['FAT32', 'FAT', 'exFAT', 'NTFS'] and
+                    partition.mountpoint and
+                    len(partition.mountpoint) == 3 and  # Drive letter like "C:\"
+                    partition.mountpoint.endswith('\\')
+                )
+                
+                if is_removable or is_likely_usb:
                     try:
                         if os.path.exists(partition.mountpoint):
                             usage = psutil.disk_usage(partition.mountpoint)
@@ -161,12 +184,15 @@ class USBFileManager:
                                 total_gb = usage.total / (1024**3)
                                 if total_gb < 2048:  # Less than 2TB
                                     usb_drives.append(partition.mountpoint)
-                                    print(f"Found removable drive: {partition.mountpoint} ({total_gb:.1f}GB)")
-                    except (PermissionError, OSError):
+                                    print(f"✅ Found removable drive: {partition.mountpoint} ({total_gb:.1f}GB)")
+                                else:
+                                    print(f"Drive {partition.mountpoint} too large ({total_gb:.1f}GB) - likely not USB")
+                    except (PermissionError, OSError) as e:
+                        print(f"❌ Cannot access {partition.mountpoint}: {e}")
                         continue
                         
         except Exception as e:
-            print(f"Error in fallback USB detection: {e}")
+            print(f"❌ Error in fallback USB detection: {e}")
             
         return usb_drives
     

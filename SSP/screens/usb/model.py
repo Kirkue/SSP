@@ -161,6 +161,46 @@ class USBScreenModel(QObject):
             self.status_changed.emit("Error checking for USB drives.", 'error')
             print(f"Error during USB check: {e}")
     
+    def force_usb_scan(self):
+        """Force a comprehensive USB scan with detailed logging."""
+        try:
+            self.status_changed.emit("Performing comprehensive USB scan...", 'monitoring')
+            
+            # Stop monitoring temporarily
+            self.stop_usb_monitoring()
+            
+            # Get all drives using multiple methods
+            usb_drives = self.usb_manager.get_usb_drives()
+            
+            if not usb_drives:
+                # Try alternative detection methods
+                import psutil
+                all_partitions = psutil.disk_partitions()
+                print(f"All available partitions: {[(p.device, p.mountpoint, p.opts) for p in all_partitions]}")
+                
+                # Check for any accessible drives that might be USB
+                for partition in all_partitions:
+                    if partition.mountpoint and os.path.exists(partition.mountpoint):
+                        try:
+                            # Try to list contents to see if it's accessible
+                            contents = os.listdir(partition.mountpoint)
+                            print(f"Drive {partition.mountpoint} is accessible with {len(contents)} items")
+                            
+                            # If it's a single-letter drive (like D:, E:, F:), it might be USB
+                            if len(partition.mountpoint) == 3 and partition.mountpoint.endswith('\\'):
+                                drive_letter = partition.mountpoint[0]
+                                if drive_letter not in ['C', 'A', 'B']:  # Exclude system drives
+                                    usb_drives.append(partition.mountpoint)
+                                    print(f"✅ Added potential USB drive: {partition.mountpoint}")
+                        except Exception as e:
+                            print(f"❌ Cannot access {partition.mountpoint}: {e}")
+            
+            self.handle_usb_scan_result(usb_drives)
+            
+        except Exception as e:
+            self.status_changed.emit(f"Error during force scan: {str(e)}", 'error')
+            print(f"Error during force USB scan: {e}")
+    
     
     def handle_usb_scan_result(self, usb_drives):
         """Processes the results of a USB scan."""
