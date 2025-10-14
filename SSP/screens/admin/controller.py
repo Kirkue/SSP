@@ -111,4 +111,13 @@ class AdminController(QWidget):
         self.main_app.show_screen('idle')
 
     def _show_data_viewer(self):
-        self.main_app.show_screen('data_viewer')
+        """Navigate to data viewer screen with error handling."""
+        try:
+            if hasattr(self.main_app, 'data_viewer_screen') and self.main_app.data_viewer_screen is not None:
+                self.main_app.show_screen('data_viewer')
+            else:
+                print("❌ Data viewer screen is not available")
+                self.view.show_message_box("Error", "Data viewer is not available. Please restart the application.")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to show data viewer: {e}")
+            self.view.show_message_box("Error", f"Failed to open data viewer: {str(e)}")

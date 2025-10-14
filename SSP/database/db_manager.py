@@ -19,8 +19,10 @@ class DatabaseManager:
         try:
             self.conn = sqlite3.connect(self.db_path)
             self.conn.row_factory = self.dict_factory
+            print(f"✅ Database connection established: {self.db_path}")
         except sqlite3.Error as e:
-            print(f"Database connection error: {e}")
+            print(f"❌ Database connection error: {e}")
+            self.conn = None
 
     def close(self):
         """Close the database connection."""
@@ -90,13 +92,20 @@ class DatabaseManager:
             print(f"Error logging transaction: {e}")
 
     def get_transaction_history(self):
-        if not self.conn: return []
+        if not self.conn: 
+            print("❌ ERROR: No database connection for get_transaction_history")
+            return []
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT * FROM transactions ORDER BY timestamp DESC")
-            return cursor.fetchall()
+            results = cursor.fetchall()
+            print(f"✅ Retrieved {len(results)} transactions from database")
+            return results
         except sqlite3.Error as e:
-            print(f"Error getting transaction history: {e}")
+            print(f"❌ ERROR: Failed to get transaction history: {e}")
+            return []
+        except Exception as e:
+            print(f"❌ ERROR: Unexpected error in get_transaction_history: {e}")
             return []
 
     def update_cash_inventory(self, denomination, count, type):
@@ -121,13 +130,20 @@ class DatabaseManager:
             print(f"Error updating cash inventory: {e}")
 
     def get_cash_inventory(self):
-        if not self.conn: return []
+        if not self.conn: 
+            print("❌ ERROR: No database connection for get_cash_inventory")
+            return []
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT * FROM cash_inventory ORDER BY denomination ASC")
-            return cursor.fetchall()
+            results = cursor.fetchall()
+            print(f"✅ Retrieved {len(results)} cash inventory items from database")
+            return results
         except sqlite3.Error as e:
-            print(f"Error getting cash inventory: {e}")
+            print(f"❌ ERROR: Failed to get cash inventory: {e}")
+            return []
+        except Exception as e:
+            print(f"❌ ERROR: Unexpected error in get_cash_inventory: {e}")
             return []
 
     def log_error(self, error_type, message, context):
@@ -143,13 +159,20 @@ class DatabaseManager:
             print(f"Error logging error: {e}")
 
     def get_error_log(self):
-        if not self.conn: return []
+        if not self.conn: 
+            print("❌ ERROR: No database connection for get_error_log")
+            return []
         try:
             cursor = self.conn.cursor()
             cursor.execute("SELECT * FROM error_log ORDER BY timestamp DESC")
-            return cursor.fetchall()
+            results = cursor.fetchall()
+            print(f"✅ Retrieved {len(results)} error log entries from database")
+            return results
         except sqlite3.Error as e:
-            print(f"Error getting error log: {e}")
+            print(f"❌ ERROR: Failed to get error log: {e}")
+            return []
+        except Exception as e:
+            print(f"❌ ERROR: Unexpected error in get_error_log: {e}")
             return []
 
     # --- NEW: get_supplies_status method ---

@@ -13,7 +13,18 @@ class DataViewerController(QWidget):
         super().__init__(parent)
         self.main_app = main_app
         
-        self.model = DataViewerModel(db_manager)
+        # Add error handling for database manager
+        if db_manager is None:
+            print("❌ ERROR: Database manager is None in DataViewerController")
+            raise ValueError("Database manager cannot be None")
+        
+        try:
+            self.model = DataViewerModel(db_manager)
+            print("✅ DataViewerModel initialized successfully")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to initialize DataViewerModel: {e}")
+            raise
+        
         # Pass the background image path to the view
         background_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets', 'data_viewer_screen background.png')
         self.view = DataViewerScreenView(background_path)
@@ -51,7 +62,12 @@ class DataViewerController(QWidget):
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
         print("Data viewer screen entered. Loading all data.")
-        self.model.refresh_all_data()
+        try:
+            self.model.refresh_all_data()
+            print("✅ Data viewer data loaded successfully")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to load data in data viewer: {e}")
+            self._show_message("Error", f"Failed to load data: {str(e)}")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""

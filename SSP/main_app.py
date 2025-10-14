@@ -98,7 +98,15 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager = PrinterManager()
         
         # Initialize remaining screens that depend on other components
-        self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
+        try:
+            print("🔄 Initializing data viewer screen...")
+            self.data_viewer_screen = DataViewerController(self, self.admin_screen.db_manager)
+            print("✅ Data viewer screen initialized successfully")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to initialize data viewer screen: {e}")
+            # Create a dummy data viewer to prevent crashes
+            self.data_viewer_screen = None
+            
         self.thank_you_screen = ThankYouController(self)
 
         # Add all screens to stacked widget in order (see SCREEN_MAP)
@@ -108,7 +116,13 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.addWidget(self.printing_options_screen)
         self.stacked_widget.addWidget(self.payment_screen)
         self.stacked_widget.addWidget(self.admin_screen)
-        self.stacked_widget.addWidget(self.data_viewer_screen)
+        
+        # Only add data viewer if it was initialized successfully
+        if self.data_viewer_screen is not None:
+            self.stacked_widget.addWidget(self.data_viewer_screen)
+        else:
+            print("⚠️ Data viewer screen not available - skipping")
+            
         self.stacked_widget.addWidget(self.thank_you_screen)
 
         # Show idle screen as initial screen
