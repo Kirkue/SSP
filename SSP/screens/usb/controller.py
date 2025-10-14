@@ -26,7 +26,6 @@ class USBController(QWidget):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller ---
         self.view.back_button_clicked.connect(self._go_back)
-        self.view.cancel_button_clicked.connect(self._cancel_operation)
         
         # --- Model -> View ---
         self.model.status_changed.connect(self._update_status)
@@ -48,10 +47,6 @@ class USBController(QWidget):
     
     def _go_back(self):
         """Navigates back to the idle screen."""
-        self.main_app.show_screen('idle')
-    
-    def _cancel_operation(self):
-        """Cancels the current operation and goes back to idle."""
         self.main_app.show_screen('idle')
     
     # --- Public API for main_app ---

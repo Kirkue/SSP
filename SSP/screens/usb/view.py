@@ -14,7 +14,6 @@ def get_base_dir():
 class USBScreenView(QWidget):
     """The user interface for the USB Screen. Contains no logic."""
     back_button_clicked = pyqtSignal()
-    cancel_button_clicked = pyqtSignal()
     
     def __init__(self):
         super().__init__()
@@ -63,9 +62,6 @@ class USBScreenView(QWidget):
         self.back_button = QPushButton("← Back to Main")
         self.back_button.setStyleSheet(self.get_back_button_style())
         
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setStyleSheet(self.get_cancel_button_style())
-        
         # --- Layout Assembly ---
         fg_layout.addStretch(3)
         fg_layout.addWidget(title, 0, Qt.AlignCenter)
@@ -84,7 +80,6 @@ class USBScreenView(QWidget):
         nav_buttons_layout = QHBoxLayout()
         nav_buttons_layout.addWidget(self.back_button, 0, Qt.AlignLeft)
         nav_buttons_layout.addStretch()
-        nav_buttons_layout.addWidget(self.cancel_button, 0, Qt.AlignRight)
         fg_layout.addLayout(nav_buttons_layout)
 
         # 4. Add Layers to Main Layout
@@ -96,7 +91,6 @@ class USBScreenView(QWidget):
 
         # Connect button signals
         self.back_button.clicked.connect(self.back_button_clicked.emit)
-        self.cancel_button.clicked.connect(self.cancel_button_clicked.emit)
     
     def setup_timers(self):
         """Sets up timers for the view."""
@@ -170,12 +164,3 @@ class USBScreenView(QWidget):
             QPushButton:hover { background-color: #5a6268; }
         """
 
-    def get_cancel_button_style(self):
-        """Returns the style for the cancel button."""
-        return """
-            QPushButton { 
-                background-color: #ff0000; color: white; font-size: 14px;
-                border: none; border-radius: 6px; padding: 10px 20px;
-            }
-            QPushButton:hover { background-color: #ffb84d; }
-        """
