@@ -15,7 +15,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QDesktopWidget
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon
 from screens.idle import IdleController
@@ -31,6 +31,7 @@ from managers.printer_manager import PrinterManager
 from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
 from managers.sms_manager import cleanup_sms
+from config import get_config
 
 try:
     from managers.usb_file_manager import USBFileManager
@@ -68,8 +69,9 @@ class PrintingSystemApp(QMainWindow):
         """Initialize the main application window and all subsystems."""
         super().__init__()
         self.setWindowTitle("Printing System GUI")
-        self.setGeometry(100, 100, 1280, 720)
-        self.setMinimumSize(1280, 720)
+        
+        # Get screen dimensions and set appropriate window size
+        self._setup_display()
 
         # Initialize stacked widget for screen management
         self.stacked_widget = QStackedWidget()
@@ -118,6 +120,21 @@ class PrintingSystemApp(QMainWindow):
                 background-color: transparent;
             }
         """)
+    
+    def _setup_display(self):
+        """
+        Configure display settings - keep original resolution but go fullscreen.
+        """
+        # Set the original window size
+        self.setGeometry(100, 100, 1280, 720)
+        self.setMinimumSize(1280, 720)
+        
+        # Set window flags for kiosk-like behavior
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        
+        # Go fullscreen on startup
+        print("🖥️ Starting in fullscreen mode")
+        self.showFullScreen()
     
     def _connect_thread_managers(self):
         """
@@ -392,7 +409,7 @@ def main():
         app.setApplicationVersion("1.0")
         window = PrintingSystemApp()
 
-        # Show window at the size set via setGeometry()/setMinimumSize
+        # Show window (size and mode determined by _setup_display)
         window.show()
         
         sys.exit(app.exec_())

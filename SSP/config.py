@@ -173,6 +173,33 @@ class Config:
     def pixel_count_threshold(self) -> int:
         """Get minimum pixel count threshold for color detection."""
         return self.get('PIXEL_COUNT_THRESHOLD', int)
+    
+    # Display settings
+    
+    @property
+    def force_fullscreen(self) -> bool:
+        """Force fullscreen mode regardless of screen size."""
+        return self.get('FORCE_FULLSCREEN', bool)
+    
+    @property
+    def window_width(self) -> int:
+        """Get preferred window width for windowed mode."""
+        return self.get('WINDOW_WIDTH', int)
+    
+    @property
+    def window_height(self) -> int:
+        """Get preferred window height for windowed mode."""
+        return self.get('WINDOW_HEIGHT', int)
+    
+    @property
+    def fullscreen_threshold_width(self) -> int:
+        """Get screen width threshold below which fullscreen is used."""
+        return self.get('FULLSCREEN_THRESHOLD_WIDTH', int)
+    
+    @property
+    def fullscreen_threshold_height(self) -> int:
+        """Get screen height threshold below which fullscreen is used."""
+        return self.get('FULLSCREEN_THRESHOLD_HEIGHT', int)
 
 
 # Global configuration instance
