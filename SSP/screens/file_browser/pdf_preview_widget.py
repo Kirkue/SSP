@@ -23,7 +23,7 @@ class PDFPreviewWidget(QWidget):
         
         self.setStyleSheet("""
             PDFPreviewWidget {
-                background-color: #f9f9f9;
+                background-color: #c4c4c4;
                 border: 1px solid #ddd;
                 border-radius: 4px;
             }
@@ -50,14 +50,14 @@ class PDFPreviewWidget(QWidget):
         if borderless:
             self.setStyleSheet("""
                 PDFPreviewWidget {
-                    background-color: white;
+                    background-color: #c4c4c4;
                     border: none;
                 }
             """)
         else:
             self.setStyleSheet("""
                 PDFPreviewWidget {
-                    background-color: #f9f9f9;
+                    background-color: #c4c4c4;
                     border: 1px solid #ddd;
                     border-radius: 4px;
                 }
@@ -89,20 +89,13 @@ class PDFPreviewWidget(QWidget):
 
     def mousePressEvent(self, event):
         """Handles mouse press events for panning."""
-        if event.button() == Qt.LeftButton:
-            self._is_panning = True
-            self._last_pan_point = event.pos()
-            self.setCursor(Qt.ClosedHandCursor)
+        # Disable panning: do nothing special on mouse press
+        self.setCursor(Qt.ArrowCursor)
 
     def mouseMoveEvent(self, event):
         """Handles mouse move events for panning."""
-        if self._is_panning:
-            delta = event.pos() - self._last_pan_point
-            self._pan_offset += delta
-            self._last_pan_point = event.pos()
-            self.update()
-        else:
-            self.setCursor(Qt.OpenHandCursor)
+        # Disable panning: ignore drag and keep cursor default
+        self.setCursor(Qt.ArrowCursor)
 
     def mouseReleaseEvent(self, event):
         """Handles mouse release events."""
@@ -115,26 +108,34 @@ class PDFPreviewWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        # Fill background
-        if self._borderless:
-            painter.fillRect(self.rect(), QColor(255, 255, 255))
-        else:
-            painter.fillRect(self.rect(), QColor(249, 249, 249))
+        # Fill background with container tint so page edges are visible
+        painter.fillRect(self.rect(), QColor(196, 196, 196))
         
         if self._pixmap is None:
             return
         
-        # Calculate scaled pixmap size
+        # Calculate scaled pixmap size: fit entire page to widget by default
         pixmap_size = self._pixmap.size()
-        scaled_size = QSize(
-            int(pixmap_size.width() * self._zoom_factor),
-            int(pixmap_size.height() * self._zoom_factor)
-        )
+        widget_rect = self.rect()
+        if self._zoom_factor == 1.0:
+            # Fit-to-widget behavior at default zoom
+            scale_w = widget_rect.width() / max(1, pixmap_size.width())
+            scale_h = widget_rect.height() / max(1, pixmap_size.height())
+            fit_scale = min(scale_w, scale_h)
+            scaled_size = QSize(
+                int(pixmap_size.width() * fit_scale),
+                int(pixmap_size.height() * fit_scale)
+            )
+        else:
+            scaled_size = QSize(
+                int(pixmap_size.width() * self._zoom_factor),
+                int(pixmap_size.height() * self._zoom_factor)
+            )
         
         # Calculate position to center the pixmap
-        widget_rect = self.rect()
-        x = (widget_rect.width() - scaled_size.width()) // 2 + int(self._pan_offset.x())
-        y = (widget_rect.height() - scaled_size.height()) // 2 + int(self._pan_offset.y())
+        # Center image without panning
+        x = (widget_rect.width() - scaled_size.width()) // 2
+        y = (widget_rect.height() - scaled_size.height()) // 2
         
         # Draw the pixmap
         painter.drawPixmap(x, y, scaled_size.width(), scaled_size.height(), self._pixmap)
@@ -147,4 +148,5 @@ class PDFPreviewWidget(QWidget):
         """Returns the preferred size of the widget."""
         if self._pixmap:
             return self._pixmap.size()
-        return QSize(400, 600)
+        # Encourage tall previews so items fill the preview container height
+        return QSize(360, 800)

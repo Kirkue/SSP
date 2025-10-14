@@ -82,13 +82,13 @@ class AdminScreenView(QWidget):
 
         # Add empty space from top to push content down
         top_spacer = QLabel("")
-        top_spacer.setFixedHeight(120)  # Increased space to push container further down
+        top_spacer.setFixedHeight(50)
         layout.addWidget(top_spacer)
 
         content_frame = self._create_content_frame()
         
         back_button = QPushButton("← Back to Main Screen")
-        back_button.setMinimumHeight(60)
+        back_button.setMinimumHeight(48)
         back_button.setCursor(Qt.PointingHandCursor)
         back_button.setStyleSheet("""
             QPushButton {
@@ -113,7 +113,7 @@ class AdminScreenView(QWidget):
         # Add View Data Logs button to the right side
         view_logs_button = QPushButton("View Data Logs", clicked=self.view_data_logs_clicked.emit)
         view_logs_button.setFixedWidth(200)  # Match back button width
-        view_logs_button.setFixedHeight(60)  # Match back button height
+        view_logs_button.setFixedHeight(48)
         view_logs_button.setStyleSheet(self._get_button_style("#1e440a", "#2a5d1a", font_size="16px"))
         
         # Add both buttons to the same horizontal layout
@@ -275,10 +275,10 @@ class AdminScreenView(QWidget):
         self.cyan_input.setStyleSheet("""
             QLineEdit {
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 6px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 6px;
                 padding: 5px 10px;
             }
-            QLineEdit:focus { border: 4px solid #2a5d1a; }
+            QLineEdit:focus { border: 2px solid #2a5d1a; }
         """)
         cyan_layout.addWidget(self.cyan_input)
         cyan_layout.addStretch()
@@ -297,10 +297,10 @@ class AdminScreenView(QWidget):
         self.magenta_input.setStyleSheet("""
             QLineEdit {
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 6px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 6px;
                 padding: 5px 10px;
             }
-            QLineEdit:focus { border: 4px solid #2a5d1a; }
+            QLineEdit:focus { border: 2px solid #2a5d1a; }
         """)
         magenta_layout.addWidget(self.magenta_input)
         magenta_layout.addStretch()
@@ -327,10 +327,10 @@ class AdminScreenView(QWidget):
         self.yellow_input.setStyleSheet("""
             QLineEdit {
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 6px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 6px;
                 padding: 5px 10px;
             }
-            QLineEdit:focus { border: 4px solid #2a5d1a; }
+            QLineEdit:focus { border: 2px solid #2a5d1a; }
         """)
         yellow_layout.addWidget(self.yellow_input)
         yellow_layout.addStretch()
@@ -349,10 +349,10 @@ class AdminScreenView(QWidget):
         self.black_input.setStyleSheet("""
             QLineEdit {
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 6px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 6px;
                 padding: 5px 10px;
             }
-            QLineEdit:focus { border: 4px solid #2a5d1a; }
+            QLineEdit:focus { border: 2px solid #2a5d1a; }
         """)
         black_layout.addWidget(self.black_input)
         black_layout.addStretch()
@@ -394,10 +394,10 @@ class AdminScreenView(QWidget):
         self.paper_count_input.setStyleSheet(f"""
             QLineEdit {{
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 8px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 4px solid #2a5d1a; }}
+            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
 
     def update_coin_count_display(self, coin_1_count: int, coin_5_count: int):
@@ -412,19 +412,19 @@ class AdminScreenView(QWidget):
         self.coin_1_input.setStyleSheet(f"""
             QLineEdit {{
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 8px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 4px solid #2a5d1a; }}
+            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
         
         self.coin_5_input.setStyleSheet(f"""
             QLineEdit {{
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 8px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 4px solid #2a5d1a; }}
+            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
 
     def _get_coin_color(self, count: int) -> str:
@@ -471,37 +471,37 @@ class AdminScreenView(QWidget):
         self.cyan_input.setStyleSheet(f"""
             QLineEdit {{
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 8px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 4px solid #2a5d1a; }}
+            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
         
         self.magenta_input.setStyleSheet(f"""
             QLineEdit {{
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 8px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 4px solid #2a5d1a; }}
+            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
         
         self.yellow_input.setStyleSheet(f"""
             QLineEdit {{
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 8px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 4px solid #2a5d1a; }}
+            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
         
         self.black_input.setStyleSheet(f"""
             QLineEdit {{
                 background-color: white; color: #36454F; font-size: 22px;
-                font-weight: bold; border: 4px solid #1e440a; border-radius: 8px;
+                font-weight: bold; border: 2px solid #1e440a; border-radius: 8px;
                 padding: 5px 10px;
             }}
-            QLineEdit:focus {{ border: 4px solid #2a5d1a; }}
+            QLineEdit:focus {{ border: 2px solid #2a5d1a; }}
         """)
 
     def _get_ink_color(self, level: float) -> str:
@@ -520,7 +520,7 @@ class AdminScreenView(QWidget):
                 color: #36454F;
                 font-size: 18px;
                 font-weight: bold;
-                border: 4px solid #1e440a;
+                border: 2px solid #1e440a;
                 border-radius: 10px;
                 margin-top: 10px;
                 padding-top: 10px;

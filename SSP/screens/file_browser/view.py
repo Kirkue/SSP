@@ -99,7 +99,7 @@ class PDFButton(QPushButton):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setStyleSheet(self.get_normal_style())
         self.clicked.connect(self.on_click)
-        self.setMinimumWidth(300)
+        self.setMinimumWidth(280)
         self.setFixedHeight(60)
 
     def get_normal_style(self):
@@ -137,14 +137,16 @@ class PDFPageWidget(QFrame):
     def __init__(self, page_num=1, checked=True):
         super().__init__()
         self.page_num = page_num
-        self.setFixedSize(150, 210)
+        self._original_pixmap = None
+        # Allow the page widget to expand to fill available space
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setup_ui(checked)
         
     def setup_ui(self, checked):
         self.setStyleSheet("QFrame { background-color: white; border: 2px solid #ddd; border-radius: 8px; margin: 4px; }")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
         self.checkbox = QCheckBox(f"Page {self.page_num}")
         self.checkbox.setChecked(checked)
         self.checkbox.setStyleSheet("""
@@ -152,8 +154,8 @@ class PDFPageWidget(QFrame):
                 color: #36454F; 
                 font-size: 14px; 
                 font-weight: bold;
-                padding: 8px;
-                min-height: 30px;
+                padding: 4px 2px 6px 2px;
+                min-height: 26px;
             }
             QCheckBox::indicator { 
                 width: 20px; 
@@ -173,10 +175,11 @@ class PDFPageWidget(QFrame):
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumHeight(160)
+        self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.preview_label.setStyleSheet("QLabel { background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; color: #36454F; font-size: 10px; }")
         self.preview_label.setText(f"Loading\nPage {self.page_num}...")
-        layout.addWidget(self.checkbox)
-        layout.addWidget(self.preview_label)
+        layout.addWidget(self.checkbox, 0)
+        layout.addWidget(self.preview_label, 1)
         self.setMouseTracking(True)
         
     def mousePressEvent(self, event):
@@ -191,9 +194,24 @@ class PDFPageWidget(QFrame):
             self.setStyleSheet("QFrame { background-color: #f5f5f5; border: 2px solid #ccc; border-radius: 8px; margin: 4px; }")
         
     def set_preview_image(self, pixmap):
-        self.preview_label.clear()
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setPixmap(pixmap)
+        # Store original pixmap and scale to fit current label size
+        self._original_pixmap = pixmap
+        self._update_scaled_preview()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Rescale preview on resize to fill available space
+        if self._original_pixmap is not None:
+            self._update_scaled_preview()
+
+    def _update_scaled_preview(self):
+        if self._original_pixmap is None:
+            return
+        label_size = self.preview_label.size()
+        if label_size.width() <= 0 or label_size.height() <= 0:
+            return
+        scaled = self._original_pixmap.scaled(label_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.preview_label.setPixmap(scaled)
         
     def set_error_message(self, error_msg):
         self.preview_label.setText(f"Page {self.page_num}\n\nError:\n{error_msg}")
@@ -222,9 +240,13 @@ class PDFPreviewThread(QThread):
                     break
                 try:
                     page = doc[page_num - 1]
-                    pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
-                    qimg = QImage.fromData(pix.tobytes("ppm"))
-                    pixmap = QPixmap.fromImage(qimg).scaled(130, 170, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    # Render at higher resolution to avoid pixelation in previews
+                    target_height_px = 1000  # target preview rendering height
+                    page_height_pts = max(1.0, page.rect.height)
+                    scale = min(5.0, max(1.5, target_height_px / page_height_pts))
+                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                    qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+                    pixmap = QPixmap.fromImage(qimg)
                     self.preview_ready.emit(page_num, pixmap)
                 except Exception as e: 
                     self.error_occurred.emit(page_num, str(e))
@@ -241,7 +263,7 @@ class FileBrowserView(QWidget):
     
     SINGLE_PAGE_PREVIEW_WIDTH = 280
     SINGLE_PAGE_PREVIEW_HEIGHT = 380
-    ITEMS_PER_GRID_PAGE = 4
+    ITEMS_PER_GRID_PAGE = 3
 
     # Signals for user interactions
     back_button_clicked = pyqtSignal()
@@ -302,7 +324,7 @@ class FileBrowserView(QWidget):
 
         # LEFT PANEL
         left_panel = QFrame()
-        left_panel.setFixedWidth(340) 
+        left_panel.setFixedWidth(360) 
         left_panel.setStyleSheet("QFrame { background-color: transparent; border: none; }")
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(10, 0, 10, 20)
@@ -350,30 +372,45 @@ class FileBrowserView(QWidget):
         file_scroll.setWidgetResizable(True)
         file_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         file_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # Keep viewport margin default so content width is unchanged
+        file_scroll.setViewportMargins(0, 0, 0, 0)
         file_scroll.setStyleSheet("""
             QScrollArea { 
                 border: none; 
                 background-color: transparent; 
             }
+            /* Rounded, lighter track without borders */
             QScrollBar:vertical { 
-                background-color: #333; 
-                width: 16px; 
+                background-color: #d9d9d9; /* visible track color */
+                width: 32px; 
+                border: none; 
                 border-radius: 8px; 
-                margin: 2px;
-                border: none;
+                margin: 2px; 
             }
+            QScrollBar::groove:vertical { 
+                background-color: #d9d9d9; /* lighter than handle */
+                border: none; 
+                border-radius: 8px; 
+                margin: 2px; 
+            }
+            /* Rounded handle */
             QScrollBar::handle:vertical { 
                 background-color: #666; 
+                border: none; 
                 border-radius: 8px; 
                 min-height: 30px; 
-                margin: 2px;
-                border: none;
+                margin: 2px; 
             }
             QScrollBar::handle:vertical:hover { 
                 background-color: #888; 
             }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { 
+                height: 0px; 
+                border: none; 
+                background: transparent; 
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { 
+                background: transparent; 
             }
         """)
         
@@ -488,53 +525,28 @@ class FileBrowserView(QWidget):
         self.preview_container.setStyleSheet("QFrame { border: 2px solid #0f1f00; border-radius: 6px; background-color: #fffff; }")
         
         self.preview_layout = QGridLayout(self.preview_container)
-        self.preview_layout.setSpacing(5)
-        # Set up stretches for horizontal and vertical centering
-        self.preview_layout.setColumnStretch(0, 1) # Left horizontal stretch
-        self.preview_layout.setColumnStretch(4, 1) # Right horizontal stretch
-        self.preview_layout.setRowStretch(0, 1)    # Top vertical stretch
-        self.preview_layout.setRowStretch(3, 1)    # Bottom vertical stretch
+        self.preview_layout.setSpacing(8)
+        # Minimize outer gutters and maximize the three content columns
+        self.preview_layout.setContentsMargins(10, 10, 10, 10)
+        self.preview_layout.setColumnStretch(0, 0) # Left gutter
+        self.preview_layout.setColumnStretch(1, 1) # Content 1
+        self.preview_layout.setColumnStretch(2, 1) # Content 2
+        self.preview_layout.setColumnStretch(3, 1) # Content 3
+        self.preview_layout.setColumnStretch(4, 0) # Right gutter
+        # Use a single content row that takes all height
+        self.preview_layout.setRowStretch(0, 1)
 
-        # SINGLE PAGE VIEW CONTAINER
+        # SINGLE PAGE VIEW CONTAINER (only the preview lives here to maximize height)
         self.single_page_widget = QWidget()
-        self.single_page_widget.setStyleSheet("background-color: #fffdf7;") 
+        self.single_page_widget.setStyleSheet("background-color: #c4c4c4;") 
         self.single_page_layout = QVBoxLayout(self.single_page_widget)
         self.single_page_layout.setSpacing(8)
         self.single_page_layout.setAlignment(Qt.AlignVCenter)
         self.single_page_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        nav_layout = QHBoxLayout()
-        nav_btn_style = f"""
-            QPushButton {{
-                background-color: #1e440a; color: #fff; border: none; border-radius: 4px;
-                font-size: 18px; width: 40px; height: 40px; min-width: 40px; max-width: 40px; min-height: 40px; max-height: 40px;
-                padding: 0; font-weight: bold;
-            }}
-            QPushButton:pressed, QPushButton:checked, QPushButton:hover {{ background-color: #2a5d1a; }}
-        """
-        self.prev_page_btn = QPushButton("←")
-        self.prev_page_btn.setStyleSheet(nav_btn_style)
-        self.next_page_btn = QPushButton("→")
-        self.next_page_btn.setStyleSheet(nav_btn_style)
-        self.prev_page_btn.setFixedHeight(button_height)
-        self.next_page_btn.setFixedHeight(button_height)
-        self.page_input = QLabel("1")
-        self.page_input.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 13px; min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; }")
-        nav_layout.addWidget(self.prev_page_btn)
-        nav_layout.addWidget(self.page_input)
-        nav_layout.addWidget(self.next_page_btn)
-        nav_layout.addStretch()
-        self.prev_page_btn.clicked.connect(self.prev_page_clicked.emit)
-        self.next_page_btn.clicked.connect(self.next_page_clicked.emit)
-        self.single_page_layout.addLayout(nav_layout)
-        self.single_page_checkbox = QCheckBox("Select this page")
-        self.single_page_checkbox.setStyleSheet("QCheckBox { color: #36454F; font-size: 13px; background-color: transparent; }")
-        self.single_page_checkbox.stateChanged.connect(lambda state: self.single_page_checkbox_clicked.emit(state == Qt.Checked))
-        self.single_page_layout.addWidget(self.single_page_checkbox)
         self.single_page_preview = PDFPreviewWidget()
-        self.single_page_preview.setFixedSize(self.SINGLE_PAGE_PREVIEW_WIDTH, self.SINGLE_PAGE_PREVIEW_HEIGHT)
-        self.single_page_preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.single_page_layout.addWidget(self.single_page_preview, 0, Qt.AlignHCenter)
+        # Expand to fill available space and fit entire page in view
+        self.single_page_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.single_page_layout.addWidget(self.single_page_preview, 1)
 
         # PAGINATION CONTROLS
         self.prev_grid_page_btn = QPushButton("<< Prev")
@@ -575,9 +587,41 @@ class FileBrowserView(QWidget):
         self.selected_count_label.setStyleSheet("QLabel { color: #4CAF50; font-size: 14px; font-weight: bold; background-color: transparent; }")
         pagination_controls = QHBoxLayout()
         pagination_controls.setSpacing(6)
+        # Grid (all-pages) pagination controls (default visible in all-pages view)
         pagination_controls.addWidget(self.prev_grid_page_btn, 0, Qt.AlignCenter)
         pagination_controls.addWidget(self.grid_page_label, 0, Qt.AlignCenter)
         pagination_controls.addWidget(self.next_grid_page_btn, 0, Qt.AlignCenter)
+        # Single-page navigation controls (placed in same area, hidden by default)
+        nav_btn_style = f"""
+            QPushButton {{
+                background-color: #1e440a; color: #fff; border: none; border-radius: 4px;
+                font-size: 18px; width: 40px; height: 40px; min-width: 40px; max-width: 40px; min-height: 40px; max-height: 40px;
+                padding: 0; font-weight: bold;
+            }}
+            QPushButton:pressed, QPushButton:checked, QPushButton:hover {{ background-color: #2a5d1a; }}
+        """
+        self.prev_page_btn = QPushButton("←")
+        self.prev_page_btn.setStyleSheet(nav_btn_style)
+        self.next_page_btn = QPushButton("→")
+        self.next_page_btn.setStyleSheet(nav_btn_style)
+        self.prev_page_btn.setFixedHeight(button_height)
+        self.next_page_btn.setFixedHeight(button_height)
+        self.prev_page_btn.clicked.connect(self.prev_page_clicked.emit)
+        self.next_page_btn.clicked.connect(self.next_page_clicked.emit)
+        self.page_input = QLabel("1")
+        self.page_input.setStyleSheet("QLabel { background-color: transparent; color: #36454F; font-size: 13px; min-width: 40px; max-width: 40px; border-radius: 3px; padding: 1px 4px; border: none; font-weight: bold; qproperty-alignment: AlignCenter; }")
+        self.single_page_checkbox = QCheckBox("Select this page")
+        self.single_page_checkbox.setStyleSheet("QCheckBox { color: #36454F; font-size: 13px; background-color: transparent; }")
+        self.single_page_checkbox.stateChanged.connect(lambda state: self.single_page_checkbox_clicked.emit(state == Qt.Checked))
+        # Add single-page controls but hide by default
+        pagination_controls.addWidget(self.prev_page_btn, 0, Qt.AlignCenter)
+        pagination_controls.addWidget(self.page_input, 0, Qt.AlignCenter)
+        pagination_controls.addWidget(self.next_page_btn, 0, Qt.AlignCenter)
+        pagination_controls.addWidget(self.single_page_checkbox, 0, Qt.AlignCenter)
+        self.prev_page_btn.hide()
+        self.next_page_btn.hide()
+        self.page_input.hide()
+        self.single_page_checkbox.hide()
         bottom_controls.addWidget(self.back_btn, 0, Qt.AlignCenter)
         bottom_controls.addStretch(1)
         bottom_controls.addLayout(pagination_controls)
@@ -599,6 +643,7 @@ class FileBrowserView(QWidget):
         right_panel_layout.addLayout(preview_area_layout, 1)
         right_panel_layout.addLayout(bottom_controls)
         
+        # Slightly reduce the right panel stretch to give more room for the file list scrollbar
         split_row.addWidget(right_panel, 1)
         main_col.addLayout(split_row, 1)
         stacked_layout.addWidget(background_label)
@@ -677,9 +722,14 @@ class FileBrowserView(QWidget):
         """Shows the PDF preview in grid mode."""
         self.preview_container.show()
         self.single_page_widget.hide()
+        # Show grid pagination; hide single-page controls
         self.prev_grid_page_btn.show()
         self.grid_page_label.show()
         self.next_grid_page_btn.show()
+        self.prev_page_btn.hide()
+        self.next_page_btn.hide()
+        self.page_input.hide()
+        self.single_page_checkbox.hide()
         if not self.selected_pdf:
             self.prev_grid_page_btn.hide()
             self.grid_page_label.hide()
@@ -706,8 +756,8 @@ class FileBrowserView(QWidget):
             page_widget.page_checkbox_clicked.connect(self.page_checkbox_clicked.emit)
             self.page_widgets.append(page_widget)
             self.page_widget_map[page_num] = page_widget
-            # Add widgets to rows 1 and 2 to account for top stretch (2x2 grid)
-            self.preview_layout.addWidget(page_widget, (i // 2) + 1, (i % 2) + 1)
+            # Arrange a single row at row 0 with 3 columns (1..3)
+            self.preview_layout.addWidget(page_widget, 0, (i % 3) + 1)
             
         if PYMUPDF_AVAILABLE:
             self.preview_thread = PDFPreviewThread(self.selected_pdf['path'], pages_to_show)
@@ -742,9 +792,14 @@ class FileBrowserView(QWidget):
         """Shows the single page view."""
         self.preview_container.hide()
         self.single_page_widget.show()
+        # Hide grid pagination; show single-page controls in bottom bar
         self.prev_grid_page_btn.hide()
         self.grid_page_label.hide()
         self.next_grid_page_btn.hide()
+        self.prev_page_btn.show()
+        self.next_page_btn.show()
+        self.page_input.show()
+        self.single_page_checkbox.show()
         if not self.selected_pdf: 
             return
         self.single_page_preview.setBorderless(True)
@@ -763,7 +818,8 @@ class FileBrowserView(QWidget):
                 doc = fitz.open(self.selected_pdf['path'])
                 if page_num <= len(doc):
                     page = doc[page_num-1]
-                    pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72), alpha=False)
+                    # Increase DPI for sharper single-page preview (from 300 to 450 DPI)
+                    pix = page.get_pixmap(matrix=fitz.Matrix(450/72, 450/72), alpha=False)
                     qimg = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
                     self.single_page_preview.setPixmap(QPixmap.fromImage(qimg))
                 doc.close()

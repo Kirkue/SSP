@@ -1,4 +1,3 @@
-# main_app.py
 """
 Self-Service Printing System - Main Application
 
@@ -69,8 +68,8 @@ class PrintingSystemApp(QMainWindow):
         """Initialize the main application window and all subsystems."""
         super().__init__()
         self.setWindowTitle("Printing System GUI")
-        self.setGeometry(100, 100, 1024, 600)
-        self.setMinimumSize(1024, 600)
+        self.setGeometry(100, 100, 1280, 720)
+        self.setMinimumSize(1280, 720)
 
         # Initialize stacked widget for screen management
         self.stacked_widget = QStackedWidget()
@@ -393,8 +392,8 @@ def main():
         app.setApplicationVersion("1.0")
         window = PrintingSystemApp()
 
-        # Show fullscreen for kiosk mode (use window.show() for development)
-        window.showFullScreen()
+        # Show window at the size set via setGeometry()/setMinimumSize
+        window.show()
         
         sys.exit(app.exec_())
     except Exception as e:

@@ -79,7 +79,7 @@ class PinDialogView(QDialog):
         return """
             QDialog {
                 background-color: white;
-                border: 4px solid #1e440a;
+                border: 4px solid #d9d9d9;
                 border-radius: 10px;
             }
             QLabel {
@@ -88,10 +88,10 @@ class PinDialogView(QDialog):
             }
             QPushButton {
                 background-color: white;
-                color: #36454F;
+                color: #36454F; /* match 'TOUCH SCREEN TO START' */
                 font-size: 24px;
                 font-weight: bold;
-                border: 4px solid #1e440a;
+                border: 2px solid #d9d9d9; /* thinner border */
                 border-radius: 8px;
                 min-height: 60px;
             }
@@ -108,7 +108,7 @@ class PinDialogView(QDialog):
         return """
             QLabel {
                 background-color: white;
-                border: 4px solid #1e440a;
+                border: 4px solid #d9d9d9; /* updated border color */
                 border-radius: 8px;
                 font-size: 32px;
                 padding: 5px;
@@ -120,13 +120,13 @@ class PinDialogView(QDialog):
         """Returns the clear button style."""
         return """
             QPushButton {
-                background-color: #ff0000;
-                color: white;
-                border: 4px solid #ff0000;
+                background-color: white;
+                color: #36454F; /* match idle text color */
+                border: 2px solid #d9d9d9;
             }
             QPushButton:hover {
-                background-color: #ffb84d;
-                border: 4px solid #ffb84d;
+                background-color: #f5f5f5;
+                border: 2px solid #d9d9d9;
             }
         """
     
@@ -134,12 +134,12 @@ class PinDialogView(QDialog):
         """Returns the enter button style."""
         return """
             QPushButton {
-                background-color: #1e440a;
-                color: white;
-                border: 4px solid #1e440a;
+                background-color: white;
+                color: #36454F; /* match idle text color */
+                border: 2px solid #d9d9d9; /* thinner border */
             }
             QPushButton:hover {
-                background-color: #2a5d1a;
-                border: 4px solid #2a5d1a;
+                background-color: #f0f0f0;
+                border: 2px solid #d9d9d9;
             }
         """

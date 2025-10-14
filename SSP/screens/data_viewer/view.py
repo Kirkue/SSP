@@ -71,7 +71,7 @@ class DataViewerScreenView(QWidget):
 
         # Add empty space from top to push content down
         top_spacer = QLabel("")
-        top_spacer.setFixedHeight(120)  # Space to push content down
+        top_spacer.setFixedHeight(50)
         layout.addWidget(top_spacer)
 
         # --- Content Container ---
@@ -84,8 +84,8 @@ class DataViewerScreenView(QWidget):
         
         # Back Button
         self.back_button = QPushButton("← Back to Admin Screen")
-        self.back_button.setFixedWidth(200)
-        self.back_button.setFixedHeight(60)
+        self.back_button.setFixedWidth(260)
+        self.back_button.setFixedHeight(48)
         self.back_button.setCursor(Qt.PointingHandCursor)
         self.back_button.setStyleSheet(self.get_back_button_style())
         self.back_button.clicked.connect(self.back_clicked.emit)
@@ -93,7 +93,7 @@ class DataViewerScreenView(QWidget):
         # Refresh Data Button
         self.refresh_data_button = QPushButton("Refresh Data")
         self.refresh_data_button.setFixedWidth(200)
-        self.refresh_data_button.setFixedHeight(60)
+        self.refresh_data_button.setFixedHeight(48)
         self.refresh_data_button.setStyleSheet(self.get_refresh_button_style())
         self.refresh_data_button.clicked.connect(self._on_refresh_clicked)
         
@@ -112,7 +112,7 @@ class DataViewerScreenView(QWidget):
         frame.setStyleSheet("""
             #contentFrame {
                 background-color: transparent;
-                border: 4px solid #1e440a;
+                border: 2px solid #1e440a;
                 border-radius: 10px;
             }
         """)
@@ -252,7 +252,7 @@ class DataViewerScreenView(QWidget):
             QTabBar::tab {
                 background-color: #15300a;
                 color: white;
-                padding: 15px 30px;
+                padding: 10px 20px;
                 margin: 2px;
                 border-top-left-radius: 5px;
                 border-top-right-radius: 5px;
@@ -260,8 +260,8 @@ class DataViewerScreenView(QWidget):
                 border-bottom: none;
                 font-size: 16px;
                 font-weight: bold;
-                min-height: 20px;
-                min-width: 150px;
+                min-height: 18px;
+                min-width: 120px;
             }
             QTabBar::tab:selected {
                 background-color: #1e440a;
