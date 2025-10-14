@@ -25,7 +25,6 @@ class USBController(QWidget):
     def _connect_signals(self):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller ---
-        self.view.test_button_clicked.connect(self.model.create_test_files)
         self.view.back_button_clicked.connect(self._go_back)
         self.view.cancel_button_clicked.connect(self._cancel_operation)
         

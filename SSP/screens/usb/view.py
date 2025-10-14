@@ -13,7 +13,6 @@ def get_base_dir():
 
 class USBScreenView(QWidget):
     """The user interface for the USB Screen. Contains no logic."""
-    test_button_clicked = pyqtSignal()
     back_button_clicked = pyqtSignal()
     cancel_button_clicked = pyqtSignal()
     
@@ -61,9 +60,6 @@ class USBScreenView(QWidget):
         self.status_indicator.setStyleSheet(self.get_initial_status_style())
 
         # Button Creation
-        self.test_button = QPushButton("TEST: Simulate PDF")
-        self.test_button.setStyleSheet(self.get_action_button_style())
-
         self.back_button = QPushButton("← Back to Main")
         self.back_button.setStyleSheet(self.get_back_button_style())
         
@@ -83,12 +79,6 @@ class USBScreenView(QWidget):
         status_layout.addStretch()
         fg_layout.addLayout(status_layout)
         fg_layout.addSpacing(20)
-
-        action_buttons_layout = QHBoxLayout()
-        action_buttons_layout.addStretch()
-        action_buttons_layout.addWidget(self.test_button)
-        action_buttons_layout.addStretch()
-        fg_layout.addLayout(action_buttons_layout)
         fg_layout.addStretch(4)
 
         nav_buttons_layout = QHBoxLayout()
@@ -105,7 +95,6 @@ class USBScreenView(QWidget):
         main_layout.setCurrentWidget(foreground_widget)
 
         # Connect button signals
-        self.test_button.clicked.connect(self.test_button_clicked.emit)
         self.back_button.clicked.connect(self.back_button_clicked.emit)
         self.cancel_button.clicked.connect(self.cancel_button_clicked.emit)
     
@@ -170,17 +159,6 @@ class USBScreenView(QWidget):
                 background-color: rgba(255, 255, 255, 0.1);
             }"""
 
-    def get_action_button_style(self):
-        """Returns the style for action buttons."""
-        return """
-            QPushButton {
-                background-color: #1e440a; color: white; font-size: 15px;
-                font-weight: bold; border: none; border-radius: 8px; 
-                padding: 12px 24px;
-            }
-            QPushButton:hover { background-color: #2a5d1a; }
-            QPushButton:pressed { background-color: #142e07; }
-        """
 
     def get_back_button_style(self):
         """Returns the style for the back button."""

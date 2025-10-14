@@ -231,32 +231,6 @@ class USBScreenModel(QObject):
             # Restart monitoring after a delay
             threading.Timer(3.0, self.start_usb_monitoring).start()
     
-    def create_test_files(self):
-        """Creates dummy PDF files for testing purposes."""
-        print("\n=== TEST: Simulating PDF files found ===")
-        temp_dir = self.usb_manager.destination_dir
-        dummy_files = []
-        
-        try:
-            for i, name in enumerate(["report.pdf", "presentation_notes.pdf"]):
-                path = os.path.join(temp_dir, name)
-                with open(path, 'wb') as f:
-                    f.write(b"%PDF-1.4\n1 0 obj<</Type/Page>>endobj\nxref\n0 2\n0000000000 65535 f \n0000000009 00000 n \ntrailer<</Size 2/Root 1 0 R>>\nstartxref\n24\n%%EOF")
-                dummy_files.append({
-                    'filename': name, 
-                    'size': 1024 * (50+i*20), 
-                    'pages': i + 2, 
-                    'path': path, 
-                    'type': '.pdf'
-                })
-            
-            self.status_changed.emit(f"Success! Found {len(dummy_files)} PDF file(s).", 'success')
-            self.pdf_files_found.emit(dummy_files)
-            
-        except Exception as e:
-            self.show_message.emit("Test Error", f"Failed to create dummy files: {e}")
-    
-    
     def on_usb_detected(self, drive_path):
         """Handles USB drive detection."""
         print(f"🔌 USB drive detected: {drive_path}")
