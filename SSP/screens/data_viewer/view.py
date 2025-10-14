@@ -228,14 +228,14 @@ class DataViewerScreenView(QWidget):
         """Updates the error log table with new data."""
         self.error_log_table.clear()
         self.error_log_table.setColumnCount(4)
-        self.error_log_table.setHorizontalHeaderLabels(["Date/Time", "Error Type", "Message", "Context"])
+        self.error_log_table.setHorizontalHeaderLabels(["Date/Time", "Error Type", "Error Message", "Screen"])
         self.error_log_table.setRowCount(len(errors))
         
         for i, error in enumerate(errors):
             self.error_log_table.setItem(i, 0, QTableWidgetItem(str(error['timestamp'])))
             self.error_log_table.setItem(i, 1, QTableWidgetItem(error['error_type']))
-            self.error_log_table.setItem(i, 2, QTableWidgetItem(error['message']))
-            self.error_log_table.setItem(i, 3, QTableWidgetItem(error['context']))
+            self.error_log_table.setItem(i, 2, QTableWidgetItem(error['error_message']))
+            self.error_log_table.setItem(i, 3, QTableWidgetItem(error['screen_name']))
         
         # Make columns evenly distributed across the entire width
         header = self.error_log_table.horizontalHeader()
