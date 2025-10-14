@@ -1,3 +1,4 @@
+# main_app.py
 """
 Self-Service Printing System - Main Application
 
