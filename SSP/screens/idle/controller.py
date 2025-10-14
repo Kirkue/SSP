@@ -62,6 +62,11 @@ class IdleController(QWidget):
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
         print("Idle screen entered.")
+        
+        # Check paper count before allowing normal operation
+        if self.main_app.check_paper_count_and_redirect():
+            return  # Redirected to no paper screen, don't proceed with normal idle operations
+        
         # The model will automatically load the background image
     
     def on_leave(self):

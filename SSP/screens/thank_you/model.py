@@ -177,6 +177,34 @@ class ThankYouModel(QObject):
         # Show admin override button
         self.admin_override_requested.emit()
     
+    def show_no_paper_error(self, paper_count: int):
+        """
+        Update state to show a no paper error.
+        
+        Args:
+            paper_count: Current paper count (0 or 1)
+        """
+        self.current_state = "error"
+        self.error_type = "no_paper"
+        
+        # Stop any existing safety timeout since we're now in error state
+        if self.redirect_timer.isActive():
+            self.redirect_timer.stop()
+        
+        if paper_count == 0:
+            self.status_updated.emit(
+                "NO PAPER AVAILABLE",
+                "The printer is out of paper. Please contact an administrator to refill paper."
+            )
+        else:  # paper_count == 1
+            self.status_updated.emit(
+                "LOW PAPER WARNING",
+                "Only 1 page remaining. Please contact an administrator to refill paper."
+            )
+        
+        # Show admin override button
+        self.admin_override_requested.emit()
+    
     def show_paper_jam_error(self, message: str):
         """
         Update state to show a paper jam error specifically.

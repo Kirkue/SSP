@@ -184,6 +184,22 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager.print_job_failed.connect(self.on_print_failed)
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting)
 
+    def check_paper_count_and_redirect(self):
+        """
+        Check current paper count and redirect to error screen if needed.
+        
+        Returns:
+            bool: True if redirected to error screen, False if paper is available
+        """
+        paper_count = self.admin_screen.get_paper_count()
+        if paper_count <= 1:
+            print(f"⚠️ Low paper detected: {paper_count} pages remaining. Redirecting to error screen.")
+            self.show_screen('thank_you')
+            # Show the no paper error on the thank you screen
+            self.thank_you_screen.show_no_paper_error(paper_count)
+            return True
+        return False
+
     def show_screen(self, screen_name):
         """
         Navigate to a different screen by name.
@@ -227,6 +243,11 @@ class PrintingSystemApp(QMainWindow):
                 - selected_pages: List of page numbers to print
         """
         print(f"Payment completed. Starting print job for {payment_info['pdf_data']['filename']}")
+        
+        # Check paper count before starting print job
+        if self.check_paper_count_and_redirect():
+            print("❌ Cannot proceed with print job - insufficient paper")
+            return
         
         self.printer_manager.print_file(
             file_path=payment_info['pdf_data']['path'],
