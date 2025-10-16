@@ -270,20 +270,27 @@ class ThankYouModel(QObject):
     def _cleanup_temp_files(self):
         """Clean up temporary files after successful printing."""
         try:
-            # Get the USB file manager from main app
-            if hasattr(self, 'main_app') and self.main_app:
-                # Try to get USB file manager from main app
-                if hasattr(self.main_app, 'usb_manager'):
-                    if hasattr(self.main_app.usb_manager, 'cleanup_temp_files'):
-                        print("🧹 Cleaning up temporary files after printing...")
-                        self.main_app.usb_manager.cleanup_temp_files()
-                        print("✅ Temporary files cleaned up successfully")
-                    else:
-                        print("⚠️ USB manager does not have cleanup_temp_files method")
+            print("🧹 Cleaning up temporary files after printing...")
+            
+            # Import USBFileManager to access cleanup methods
+            try:
+                from managers.usb_file_manager import USBFileManager
+                
+                # Create a temporary USB manager instance to access cleanup methods
+                temp_usb_manager = USBFileManager()
+                
+                # Clean up all temp folders from previous sessions
+                if hasattr(temp_usb_manager, 'cleanup_all_temp_folders'):
+                    temp_usb_manager.cleanup_all_temp_folders()
+                    print("✅ Cleaned up all temporary folders")
                 else:
-                    print("⚠️ Main app does not have usb_manager")
-            else:
-                print("⚠️ No main app reference available for cleanup")
+                    print("⚠️ cleanup_all_temp_folders method not available")
+                    
+            except ImportError as e:
+                print(f"⚠️ Could not import USBFileManager: {e}")
+            except Exception as e:
+                print(f"⚠️ Error during temp file cleanup: {e}")
+                
         except Exception as e:
             print(f"⚠️ Error during temp file cleanup: {e}")
     
