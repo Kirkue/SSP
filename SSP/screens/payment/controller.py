@@ -45,8 +45,21 @@ class PaymentController(QWidget):
         self.model.payment_completed.connect(self._handle_payment_completed)
         self.model.go_back_requested.connect(self._go_back)
     
+    def on_enter(self):
+        """Called when entering the payment screen - automatically enable payment."""
+        print("Payment screen entered - automatically enabling payment")
+        # Reset payment state for new transactions
+        self.model.reset_payment_state()
+        # Enable payment mode
+        self.model.enable_payment_mode()
+    
+    def on_leave(self):
+        """Called when leaving the payment screen - automatically disable payment."""
+        print("Payment screen leaving - automatically disabling payment")
+        self.model.disable_payment_mode()
+    
     def _toggle_payment_mode(self):
-        """Toggles between enable and disable payment mode."""
+        """Toggles between enable and disable payment mode (now just for manual override)."""
         if self.model.payment_ready:
             self.model.disable_payment_mode()
         else:

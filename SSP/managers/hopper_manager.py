@@ -7,7 +7,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 try:
     import pigpio
     PIGPIO_AVAILABLE = True
-    print("OK - pigpio library found. Hopper control is ENABLED.")
+    print("SUCCESS: pigpio library found. Hopper control is ENABLED.")
 except ImportError:
     PIGPIO_AVAILABLE = False
     print("WARNING: pigpio library not found. Hopper control will be SIMULATED.")
@@ -415,6 +415,18 @@ class ChangeDispenser:
             'actual_change': actual_change,
             'expected_change': expected_change
         }
+    
+    def cleanup_all_hoppers(self):
+        """Clean up all hopper controllers."""
+        print("Cleaning up all hopper controllers...")
+        for name, hopper in self.hoppers.items():
+            try:
+                hopper.cleanup()
+                print(f"[{name}] Hopper cleaned up")
+            except Exception as e:
+                print(f"[{name}] Error cleaning up hopper: {e}")
+        # Clear the hoppers dictionary
+        self.hoppers.clear()
     
     def cleanup(self):
         """Safely shut down all hoppers and the pigpio connection."""
