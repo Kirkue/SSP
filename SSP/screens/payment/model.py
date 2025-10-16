@@ -416,6 +416,12 @@ class PaymentModel(QObject):
             print(f"DEBUG: Starting change dispensing for ₱{change_amount:.2f}")
             self.payment_status_updated.emit(f"Please wait... Dispensing change: ₱{change_amount:.2f}")
             print("DEBUG: Payment screen will stay active during hopper dispensing")
+            
+            # Ensure change dispenser is available
+            if not hasattr(self, 'change_dispenser') or self.change_dispenser is None:
+                print("DEBUG: Change dispenser not available, creating new one")
+                self.change_dispenser = ChangeDispenser()
+            
             # Get admin screen from main_app to pass to dispense thread
             admin_screen = None
             if hasattr(self, 'main_app') and hasattr(self.main_app, 'admin_screen'):
@@ -492,8 +498,20 @@ class PaymentModel(QObject):
             if hasattr(self, 'change_dispenser') and self.change_dispenser:
                 print("DEBUG: Cleaning up change dispenser after dispensing complete")
                 self.change_dispenser.cleanup()
+                # Don't set to None here as it might be needed for future transactions
         except Exception as e:
             print(f"DEBUG: Error cleaning up change dispenser: {e}")
+        
+        # Clean up the dispense thread
+        try:
+            if hasattr(self, 'dispense_thread') and self.dispense_thread:
+                print("DEBUG: Cleaning up dispense thread after completion")
+                if self.dispense_thread.isRunning():
+                    self.dispense_thread.terminate()
+                    self.dispense_thread.wait(1000)
+                self.dispense_thread = None
+        except Exception as e:
+            print(f"DEBUG: Error cleaning up dispense thread: {e}")
     
     def _on_coin_inventory_updated(self, operation):
         """Handles the completion of coin inventory update."""
@@ -699,13 +717,17 @@ class PaymentModel(QObject):
         
         # Clean up change dispenser if it exists and is not being used
         if hasattr(self, 'change_dispenser') and self.change_dispenser:
-            try:
-                print("Cleaning up change dispenser...")
-                self.change_dispenser.cleanup()
-            except Exception as e:
-                print(f"Error cleaning up change dispenser: {e}")
-            finally:
-                self.change_dispenser = None
+            # Check if there's an active dispense thread
+            if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
+                print("Payment screen: Skipping change dispenser cleanup - dispense thread still running")
+            else:
+                try:
+                    print("Cleaning up change dispenser...")
+                    self.change_dispenser.cleanup()
+                except Exception as e:
+                    print(f"Error cleaning up change dispenser: {e}")
+                finally:
+                    self.change_dispenser = None
     
     def _log_partial_payment(self):
         """Log partial payment when user cancels transaction."""

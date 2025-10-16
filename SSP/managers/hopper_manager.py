@@ -447,6 +447,17 @@ class DispenseThread(QThread):
 
     def run(self):
         """This method is executed when the thread starts."""
+        if self.dispenser is None:
+            print("ERROR: Dispenser is None, cannot dispense change")
+            result = {
+                'success': False, 
+                'coins_1': 0, 
+                'coins_5': 0, 
+                'error': 'dispenser_not_available'
+            }
+            self.dispensing_finished.emit(result)
+            return
+            
         result = self.dispenser.dispense_change(
             self.amount, 
             self.status_update.emit, 
