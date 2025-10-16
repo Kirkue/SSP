@@ -266,7 +266,7 @@ class FileBrowserView(QWidget):
     ITEMS_PER_GRID_PAGE = 3
 
     # Signals for user interactions
-    back_button_clicked = pyqtSignal()
+    back_to_idle_clicked = pyqtSignal()
     continue_button_clicked = pyqtSignal()
     pdf_button_clicked = pyqtSignal(dict)  # pdf_data
     single_page_clicked = pyqtSignal()
@@ -572,10 +572,10 @@ class FileBrowserView(QWidget):
         # BOTTOM CONTROLS
         bottom_controls = QHBoxLayout()
         bottom_controls.setSpacing(15)
-        self.back_btn = QPushButton("← Back to Idle")
-        self.back_btn.setStyleSheet(f"QPushButton {{ color: white; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; height: {button_height}px; background-color: #ff0000; padding-left: 12px; padding-right: 12px; }} QPushButton:hover {{ background-color: #ffb84d; }}")
-        self.back_btn.setFixedHeight(button_height)
-        self.back_btn.clicked.connect(self.back_button_clicked.emit)
+        self.back_to_idle_btn = QPushButton("← Back to Idle")
+        self.back_to_idle_btn.setStyleSheet(f"QPushButton {{ color: white; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; height: {button_height}px; background-color: #6c757d; padding-left: 12px; padding-right: 12px; }} QPushButton:hover {{ background-color: #5a6268; }}")
+        self.back_to_idle_btn.setFixedHeight(button_height)
+        self.back_to_idle_btn.clicked.connect(self.back_to_idle_clicked.emit)
         self.continue_btn = QPushButton("Set Print Options →")
         self.continue_btn.setStyleSheet(all_button_style)
         self.continue_btn.setFixedHeight(button_height)
@@ -622,7 +622,7 @@ class FileBrowserView(QWidget):
         self.next_page_btn.hide()
         self.page_input.hide()
         self.single_page_checkbox.hide()
-        bottom_controls.addWidget(self.back_btn, 0, Qt.AlignCenter)
+        bottom_controls.addWidget(self.back_to_idle_btn, 0, Qt.AlignCenter)
         bottom_controls.addStretch(1)
         bottom_controls.addLayout(pagination_controls)
         bottom_controls.addStretch(1)

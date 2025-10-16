@@ -26,7 +26,7 @@ class FileBrowserController(QWidget):
     def _connect_signals(self):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller -> Model ---
-        self.view.back_button_clicked.connect(self.model.go_back_to_usb)
+        self.view.back_to_idle_clicked.connect(self._go_back_to_idle)
         self.view.continue_button_clicked.connect(self._continue_to_payment)
         self.view.pdf_button_clicked.connect(self.model.select_pdf)
         
@@ -53,6 +53,10 @@ class FileBrowserController(QWidget):
     def _load_pdf_files(self):
         """Loads PDF files from USB drive."""
         self.model.load_pdf_files()
+    
+    def _go_back_to_idle(self):
+        """Handle back to idle button click - navigate to idle screen."""
+        self.navigation_requested.emit('idle')
     
     def _continue_to_payment(self):
         """Handles continue to print options button click."""
