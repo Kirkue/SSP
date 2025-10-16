@@ -163,6 +163,10 @@ class FileBrowserModel(QObject):
         self.selected_pdf = pdf_data
         self.pdf_selected.emit(pdf_data)
         
+        # Mark file as in use for safety
+        if hasattr(self.usb_manager, 'mark_file_in_use'):
+            self.usb_manager.mark_file_in_use(pdf_data['path'])
+        
         # Start analysis in background thread
         self.pdf_analysis_started.emit(pdf_data['filename'])
         self.analysis_thread = PDFAnalysisThread(pdf_data)
@@ -171,6 +175,10 @@ class FileBrowserModel(QObject):
     
     def _on_analysis_complete(self, pdf_data, analysis_data):
         """Handles completion of PDF analysis."""
+        # Mark file as complete for safety
+        if hasattr(self.usb_manager, 'mark_file_complete'):
+            self.usb_manager.mark_file_complete(pdf_data['path'])
+        
         self.pdf_analysis_completed.emit(pdf_data, analysis_data)
     
     def go_to_payment(self, pdf_data, analysis_data):

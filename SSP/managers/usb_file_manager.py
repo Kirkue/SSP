@@ -21,6 +21,11 @@ class USBFileManager:
 
         self.supported_extensions = ['.pdf']
         self.last_known_drives = set()
+        
+        # Disk safety tracking
+        self.current_usb_drive = None
+        self.files_in_use = set()  # Track files currently being processed
+        self.operation_in_progress = False
     
     def get_usb_drives(self):
         """Detect ONLY actual USB/removable drives - exclude all internal drives"""
@@ -207,11 +212,15 @@ class USBFileManager:
         return list(new_drives), list(removed_drives)
     
     def scan_and_copy_pdf_files(self, source_dir):
-        """Scan for and copy PDF files from USB drive"""
+        """Scan for and copy PDF files from USB drive with safety checks"""
         print(f"\n🔍 Starting scan_and_copy_pdf_files for {source_dir}")
         copied_files = []
 
         try:
+            # Set current drive and mark operation as in progress
+            self.set_current_drive(source_dir)
+            self.set_operation_in_progress(True)
+            
             print(f"📂 Scanning and copying PDF files from {source_dir} to {self.destination_dir}")
             
             for root, _, files in os.walk(source_dir):
@@ -221,6 +230,9 @@ class USBFileManager:
                         dest_path = os.path.join(self.destination_dir, filename)
                         
                         try:
+                            # Mark file as in use
+                            self.mark_file_in_use(source_path)
+                            
                             # Copy file and verify
                             shutil.copy2(source_path, dest_path)
                             if os.path.exists(dest_path):
@@ -244,9 +256,18 @@ class USBFileManager:
                                     'pages': page_count,
                                     'type': '.pdf'
                                 })
+                            
+                            # Mark file as complete
+                            self.mark_file_complete(source_path)
+                            
                         except Exception as e:
                             print(f"❌ Error copying {filename}: {str(e)}")
+                            # Mark file as complete even if error occurred
+                            self.mark_file_complete(source_path)
                             
+            # Mark operation as complete
+            self.set_operation_in_progress(False)
+            
             # After all files are processed
             if copied_files:
                 print(f"✅ Successfully copied {len(copied_files)} PDF files:")
@@ -259,6 +280,8 @@ class USBFileManager:
 
         except Exception as e:
             print(f"❌ Error in scan_and_copy_pdf_files: {str(e)}")
+            # Ensure operation is marked as complete even on error
+            self.set_operation_in_progress(False)
             import traceback
             traceback.print_exc()
             return []
@@ -376,3 +399,65 @@ class USBFileManager:
         except Exception as e:
             print(f"Error getting drive info for {drive_path}: {e}")
             return None
+    
+    def set_current_drive(self, drive_path):
+        """Set the current USB drive being used."""
+        self.current_usb_drive = drive_path
+        print(f"🔒 Set current USB drive: {drive_path}")
+    
+    def is_drive_safe_to_remove(self):
+        """Check if the current USB drive is safe to remove."""
+        if not self.current_usb_drive:
+            return True, "No USB drive currently in use"
+        
+        if self.operation_in_progress:
+            return False, "File operations are currently in progress"
+        
+        if self.files_in_use:
+            return False, f"Files are currently being processed: {list(self.files_in_use)}"
+        
+        # Check if drive is still accessible
+        try:
+            if not os.path.exists(self.current_usb_drive):
+                return False, "USB drive is no longer accessible"
+            
+            # Try to access the drive
+            os.listdir(self.current_usb_drive)
+            return True, "USB drive is safe to remove"
+        except Exception as e:
+            return False, f"USB drive access error: {e}"
+    
+    def mark_file_in_use(self, file_path):
+        """Mark a file as being processed."""
+        self.files_in_use.add(file_path)
+        print(f"🔒 Marked file as in use: {file_path}")
+    
+    def mark_file_complete(self, file_path):
+        """Mark a file as no longer being processed."""
+        self.files_in_use.discard(file_path)
+        print(f"🔓 Marked file as complete: {file_path}")
+    
+    def set_operation_in_progress(self, in_progress):
+        """Set the operation in progress flag."""
+        self.operation_in_progress = in_progress
+        status = "started" if in_progress else "completed"
+        print(f"🔄 File operation {status}")
+    
+    def get_safety_warning(self):
+        """Get a safety warning message for the user."""
+        if not self.current_usb_drive:
+            return None
+        
+        is_safe, message = self.is_drive_safe_to_remove()
+        if is_safe:
+            return None
+        
+        return f"⚠️ DO NOT REMOVE USB DRIVE: {message}"
+    
+    def force_safe_eject(self):
+        """Force safe ejection by clearing all operations."""
+        print("🛑 Force safe ejection requested")
+        self.files_in_use.clear()
+        self.operation_in_progress = False
+        self.current_usb_drive = None
+        print("✅ USB drive marked as safe to remove")

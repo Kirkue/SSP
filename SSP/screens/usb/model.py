@@ -61,6 +61,8 @@ class USBScreenModel(QObject):
     usb_removed = pyqtSignal(str)          # Emits removed USB drive path
     pdf_files_found = pyqtSignal(list)     # Emits list of PDF files
     show_message = pyqtSignal(str, str)    # Emits message title and text
+    safety_warning = pyqtSignal(str)       # Emits safety warning message
+    safety_warning_cleared = pyqtSignal()  # Emits when safety warning is cleared
     
     def __init__(self):
         super().__init__()
@@ -152,6 +154,14 @@ class USBScreenModel(QObject):
     def check_current_drives(self):
         """Checks for currently connected USB drives."""
         try:
+            # Clear any existing monitoring state first
+            self.stop_usb_monitoring()
+            
+            # Reset the USB manager's known drives to force fresh detection
+            if hasattr(self.usb_manager, 'last_known_drives'):
+                self.usb_manager.last_known_drives = set()
+                print("🔄 Cleared USB manager's known drives cache")
+            
             current_drives = self.usb_manager.get_usb_drives()
             if current_drives:
                 self.handle_usb_scan_result(current_drives)
@@ -237,7 +247,49 @@ class USBScreenModel(QObject):
         self.handle_usb_scan_result([drive_path])
     
     def on_usb_removed(self, drive_path):
-        """Handles USB drive removal."""
+        """Handles USB drive removal with safety checks."""
         print(f"🔌 USB drive removed: {drive_path}")
-        self.status_changed.emit("USB drive was removed.", 'warning')
+        
+        # Check if it's safe to remove the drive
+        if hasattr(self.usb_manager, 'is_drive_safe_to_remove'):
+            is_safe, message = self.usb_manager.is_drive_safe_to_remove()
+            if not is_safe:
+                self.status_changed.emit(f"⚠️ UNSAFE REMOVAL: {message}", 'error')
+                print(f"⚠️ UNSAFE USB removal detected: {message}")
+                # Force safe ejection to clear any remaining operations
+                if hasattr(self.usb_manager, 'force_safe_eject'):
+                    self.usb_manager.force_safe_eject()
+            else:
+                self.status_changed.emit("USB drive was safely removed.", 'success')
+        else:
+            self.status_changed.emit("USB drive was removed.", 'warning')
+        
         self.start_usb_monitoring()
+    
+    def check_disk_safety(self):
+        """Check if the current USB drive is safe to remove."""
+        if hasattr(self.usb_manager, 'get_safety_warning'):
+            warning = self.usb_manager.get_safety_warning()
+            if warning:
+                self.safety_warning.emit(warning)
+                return False
+            else:
+                self.safety_warning_cleared.emit()
+        return True
+    
+    def reset_usb_state(self):
+        """Completely reset USB monitoring state - useful when switching drives."""
+        print("🔄 Resetting USB monitoring state...")
+        
+        # Stop any existing monitoring
+        self.stop_usb_monitoring()
+        
+        # Clear USB manager's cache
+        if hasattr(self.usb_manager, 'last_known_drives'):
+            self.usb_manager.last_known_drives = set()
+            print("🔄 Cleared USB manager's known drives cache")
+        
+        # Reset status
+        self.status_changed.emit("Ready for USB device...", 'monitoring')
+        
+        print("✅ USB state reset complete")

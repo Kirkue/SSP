@@ -33,6 +33,10 @@ class USBController(QWidget):
         self.model.usb_removed.connect(self.model.on_usb_removed)
         self.model.pdf_files_found.connect(self._handle_pdf_files_found)
         self.model.show_message.connect(self.view.show_message)
+        
+        # Safety warning connections
+        self.model.safety_warning.connect(self.view.show_safety_warning)
+        self.model.safety_warning_cleared.connect(self.view.hide_safety_warning)
     
     def _update_status(self, text, style_key):
         """Updates the status indicator with the given text and style."""
@@ -63,3 +67,7 @@ class USBController(QWidget):
         print("⏹️ Leaving USB screen")
         self.model.stop_usb_monitoring()
         self.view.stop_blinking()
+    
+    def reset_usb_state(self):
+        """Public method to reset USB monitoring state."""
+        self.model.reset_usb_state()

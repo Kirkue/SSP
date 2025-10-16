@@ -57,6 +57,19 @@ class USBScreenView(QWidget):
         self.status_indicator.setAlignment(Qt.AlignCenter)
         self.status_indicator.setMinimumHeight(55)
         self.status_indicator.setStyleSheet(self.get_initial_status_style())
+        
+        # Safety warning label (hidden by default)
+        self.safety_warning = QLabel("")
+        self.safety_warning.setAlignment(Qt.AlignCenter)
+        self.safety_warning.setMinimumHeight(40)
+        self.safety_warning.setStyleSheet("""
+            QLabel {
+                color: #dc3545; font-size: 16px; font-weight: bold;
+                padding: 8px 16px; border: 2px solid #dc3545; border-radius: 6px;
+                background-color: rgba(220, 53, 69, 0.1);
+            }
+        """)
+        self.safety_warning.hide()
 
         # Button Creation
         self.back_button = QPushButton("← Back to Main")
@@ -74,6 +87,14 @@ class USBScreenView(QWidget):
         status_layout.addWidget(self.status_indicator)
         status_layout.addStretch()
         fg_layout.addLayout(status_layout)
+        
+        # Add safety warning layout
+        safety_layout = QHBoxLayout()
+        safety_layout.addStretch()
+        safety_layout.addWidget(self.safety_warning)
+        safety_layout.addStretch()
+        fg_layout.addLayout(safety_layout)
+        
         fg_layout.addSpacing(20)
         fg_layout.addStretch(4)
 
@@ -163,4 +184,13 @@ class USBScreenView(QWidget):
             }
             QPushButton:hover { background-color: #5a6268; }
         """
+    
+    def show_safety_warning(self, message):
+        """Shows a safety warning message."""
+        self.safety_warning.setText(message)
+        self.safety_warning.show()
+    
+    def hide_safety_warning(self):
+        """Hides the safety warning message."""
+        self.safety_warning.hide()
 
