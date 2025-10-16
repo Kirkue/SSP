@@ -83,13 +83,17 @@ class HopperController:
     def cleanup(self):
         """Clean up GPIO resources."""
         try:
+            # First disable the hopper to stop any ongoing operations
+            if self.pi and self.pi.connected:
+                self._disable_hopper()
+                print(f"[{self.name}] Hopper disabled during cleanup")
+            
+            # Then cancel the callback
             if self.callback:
                 self.callback.cancel()
                 self.callback = None
                 print(f"[{self.name}] Callback cleaned up")
-            if self.pi and self.pi.connected:
-                self._disable_hopper()
-                print(f"[{self.name}] Hopper disabled during cleanup")
+                
         except Exception as e:
             print(f"[{self.name}] Error during cleanup: {e}")
 
@@ -277,10 +281,14 @@ class ChangeDispenser:
         """Clean up all hopper resources."""
         for name, hopper in self.hoppers.items():
             try:
-                hopper.cleanup()
-                print(f"Cleaned up hopper {name}")
+                if hopper:  # Add null check
+                    hopper.cleanup()
+                    print(f"Cleaned up hopper {name}")
             except Exception as e:
                 print(f"Error cleaning up hopper {name}: {e}")
+        
+        # Clear the hoppers dictionary after cleanup
+        self.hoppers.clear()
 
     def __del__(self):
         """Destructor to ensure cleanup."""
@@ -412,10 +420,17 @@ class ChangeDispenser:
         """Safely shut down all hoppers and the pigpio connection."""
         if self.pi and not self.simulated:
             print("Cleaning up all hopper controllers...")
-            for hopper in self.hoppers.values():
-                hopper.cleanup()
-            self.pi.stop()
-            print("pigpio connection stopped.")
+            # Clean up all hoppers first
+            self.cleanup_all_hoppers()
+            
+            # Then stop the pigpio connection
+            try:
+                self.pi.stop()
+                print("pigpio connection stopped.")
+            except Exception as e:
+                print(f"Error stopping pigpio connection: {e}")
+            finally:
+                self.pi = None
 
 
 class DispenseThread(QThread):

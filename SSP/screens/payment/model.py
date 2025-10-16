@@ -134,9 +134,17 @@ class GPIOPaymentThread(QThread):
         """Stop the GPIO thread safely."""
         print("Stopping GPIO payment thread...")
         self.running = False
+        
+        # Give the thread a moment to finish its current iteration
+        if self.isRunning():
+            self.wait(1000)  # Wait up to 1 second for graceful shutdown
+        
         if self.gpio_available and self.pi:
             try:
                 self.set_acceptor_state(False)
+                # Add a small delay to ensure the acceptor is properly disabled
+                import time
+                time.sleep(0.1)
                 self.pi.stop()
             except Exception as e:
                 print(f"Error stopping GPIO: {e}")
@@ -444,39 +452,44 @@ class PaymentModel(QObject):
         """Handles the completion of change dispensing."""
         print(f"DEBUG: _on_dispensing_finished called with result={result}")
         
-        if isinstance(result, dict) and result.get('success', False):
-            # New flow: Update database with actual coins dispensed, then print
-            coins_1 = result.get('coins_1', 0)
-            coins_5 = result.get('coins_5', 0)
-            actual_change = result.get('actual_change', 0)
-            expected_change = result.get('expected_change', 0)
-            
-            print(f"DEBUG: Change dispensing completed - ₱1={coins_1}, ₱5={coins_5}, actual={actual_change}, expected={expected_change}")
-            self.payment_status_updated.emit(f"Change dispensed! Updating inventory...")
-            
-            # Update database with actual coins dispensed
-            if hasattr(self, 'main_app') and hasattr(self.main_app, 'db_threader'):
-                print("DEBUG: Updating coin inventory in database...")
-                self.main_app.db_threader.update_coin_inventory(
-                    coins_1, coins_5, 
-                    callback=self._on_coin_inventory_updated
-                )
+        try:
+            if isinstance(result, dict) and result.get('success', False):
+                # New flow: Update database with actual coins dispensed, then print
+                coins_1 = result.get('coins_1', 0)
+                coins_5 = result.get('coins_5', 0)
+                actual_change = result.get('actual_change', 0)
+                expected_change = result.get('expected_change', 0)
+                
+                print(f"DEBUG: Change dispensing completed - ₱1={coins_1}, ₱5={coins_5}, actual={actual_change}, expected={expected_change}")
+                self.payment_status_updated.emit(f"Change dispensed! Updating inventory...")
+                
+                # Update database with actual coins dispensed
+                if hasattr(self, 'main_app') and self.main_app and hasattr(self.main_app, 'db_threader') and self.main_app.db_threader:
+                    print("DEBUG: Updating coin inventory in database...")
+                    self.main_app.db_threader.update_coin_inventory(
+                        coins_1, coins_5, 
+                        callback=self._on_coin_inventory_updated
+                    )
+                else:
+                    print("DEBUG: No database thread manager available, proceeding to print")
+                    self._start_printing()
             else:
-                print("DEBUG: No database thread manager available, proceeding to print")
-                self._start_printing()
-        else:
-            # Fallback for old boolean format
-            print(f"DEBUG: Old format result: {result}")
-            if result:
-                print("Dispensing complete.")
-                self._start_printing()
-            else:
-                print("CRITICAL: Error dispensing change.")
-                self._navigate_to_thank_you()
+                # Fallback for old boolean format
+                print(f"DEBUG: Old format result: {result}")
+                if result:
+                    print("Dispensing complete.")
+                    self._start_printing()
+                else:
+                    print("CRITICAL: Error dispensing change.")
+                    self._navigate_to_thank_you()
+        except Exception as e:
+            print(f"ERROR: Exception in _on_dispensing_finished: {e}")
+            # Fallback to navigation even if there's an error
+            self._navigate_to_thank_you()
         
         # Clean up change dispenser after dispensing is complete
         try:
-            if hasattr(self, 'change_dispenser'):
+            if hasattr(self, 'change_dispenser') and self.change_dispenser:
                 print("DEBUG: Cleaning up change dispenser after dispensing complete")
                 self.change_dispenser.cleanup()
         except Exception as e:
@@ -614,22 +627,28 @@ class PaymentModel(QObject):
         print("DEBUG: Current thread:", threading.current_thread().name)
         print("DEBUG: main_app available:", hasattr(self, 'main_app') and self.main_app is not None)
         
-        # Emit payment completed signal now that everything is done
-        if hasattr(self, 'payment_info'):
-            print("DEBUG: Emitting payment_completed signal with stored payment info")
-            self.payment_completed.emit(self.payment_info)
-        else:
-            print("DEBUG: No payment info available to emit")
-        
-        if hasattr(self, 'main_app') and self.main_app:
-            print("DEBUG: Navigating to thank you screen")
-            try:
+        try:
+            # Emit payment completed signal now that everything is done
+            if hasattr(self, 'payment_info') and self.payment_info:
+                print("DEBUG: Emitting payment_completed signal with stored payment info")
+                self.payment_completed.emit(self.payment_info)
+            else:
+                print("DEBUG: No payment info available to emit")
+            
+            if hasattr(self, 'main_app') and self.main_app:
+                print("DEBUG: Navigating to thank you screen")
                 self.main_app.show_screen('thank_you')
                 print("DEBUG: Navigation to thank you screen completed")
-            except Exception as e:
-                print(f"DEBUG: Error navigating to thank you screen: {e}")
-        else:
-            print("DEBUG: No main_app available for navigation")
+            else:
+                print("DEBUG: No main_app available for navigation")
+        except Exception as e:
+            print(f"ERROR: Exception in _navigate_to_thank_you: {e}")
+            # Try to navigate anyway as a fallback
+            try:
+                if hasattr(self, 'main_app') and self.main_app:
+                    self.main_app.show_screen('thank_you')
+            except Exception as fallback_error:
+                print(f"ERROR: Fallback navigation also failed: {fallback_error}")
     
     def on_enter(self):
         """Called when the payment screen is shown."""
@@ -651,27 +670,42 @@ class PaymentModel(QObject):
         print("Payment screen leaving")
         
         # Stop GPIO thread safely
-        if hasattr(self, 'gpio_thread') and self.gpio_thread and self.gpio_thread.isRunning():
+        if hasattr(self, 'gpio_thread') and self.gpio_thread:
             print("Stopping GPIO thread...")
-            self.gpio_thread.stop()
-            if not self.gpio_thread.wait(2000):
-                print("Warning: GPIO thread did not stop gracefully")
-                self.gpio_thread.terminate()
-                self.gpio_thread.wait(1000)
-            # Clear the thread reference
-            self.gpio_thread = None
+            try:
+                self.gpio_thread.stop()
+                if not self.gpio_thread.wait(2000):
+                    print("Warning: GPIO thread did not stop gracefully")
+                    self.gpio_thread.terminate()
+                    self.gpio_thread.wait(1000)
+            except Exception as e:
+                print(f"Error stopping GPIO thread: {e}")
+            finally:
+                # Clear the thread reference
+                self.gpio_thread = None
         
         # Stop any running dispense thread
-        if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
+        if hasattr(self, 'dispense_thread') and self.dispense_thread:
             print("Stopping dispense thread...")
-            self.dispense_thread.terminate()
-            self.dispense_thread.wait(1000)
-            # Clear the thread reference
-            self.dispense_thread = None
+            try:
+                if self.dispense_thread.isRunning():
+                    self.dispense_thread.terminate()
+                    self.dispense_thread.wait(1000)
+            except Exception as e:
+                print(f"Error stopping dispense thread: {e}")
+            finally:
+                # Clear the thread reference
+                self.dispense_thread = None
         
-        # Don't cleanup change dispenser immediately - it might still be dispensing
-        # The cleanup will happen when the dispensing thread completes
-        print("Payment screen: Skipping hopper cleanup - dispensing may still be in progress")
+        # Clean up change dispenser if it exists and is not being used
+        if hasattr(self, 'change_dispenser') and self.change_dispenser:
+            try:
+                print("Cleaning up change dispenser...")
+                self.change_dispenser.cleanup()
+            except Exception as e:
+                print(f"Error cleaning up change dispenser: {e}")
+            finally:
+                self.change_dispenser = None
     
     def _log_partial_payment(self):
         """Log partial payment when user cancels transaction."""
