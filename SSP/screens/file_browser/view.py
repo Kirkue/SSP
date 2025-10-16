@@ -572,7 +572,7 @@ class FileBrowserView(QWidget):
         # BOTTOM CONTROLS
         bottom_controls = QHBoxLayout()
         bottom_controls.setSpacing(15)
-        self.back_btn = QPushButton("← Back to USB")
+        self.back_btn = QPushButton("← Back to Idle")
         self.back_btn.setStyleSheet(f"QPushButton {{ color: white; font-size: 12px; font-weight: bold; border: none; border-radius: 4px; height: {button_height}px; background-color: #ff0000; padding-left: 12px; padding-right: 12px; }} QPushButton:hover {{ background-color: #ffb84d; }}")
         self.back_btn.setFixedHeight(button_height)
         self.back_btn.clicked.connect(self.back_button_clicked.emit)

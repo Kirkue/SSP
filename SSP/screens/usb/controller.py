@@ -60,6 +60,9 @@ class USBController(QWidget):
         print("🔄 Entering USB screen, performing initial check...")
         self.view.start_blinking()
         
+        # Reset the returning flag when entering normally
+        self.model.set_returning_from_file_browser(False)
+        
         self.model.check_current_drives()
     
     def on_leave(self):
