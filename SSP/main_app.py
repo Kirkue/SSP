@@ -30,6 +30,7 @@ from database.models import init_db
 from managers.printer_manager import PrinterManager
 from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
+from managers.gpio_manager import cleanup_gpio_manager
 from managers.sms_manager import cleanup_sms
 from config import get_config
 
@@ -404,6 +405,9 @@ class PrintingSystemApp(QMainWindow):
                 self.db_threader.stop()
             if hasattr(self, 'ink_analysis_threader'):
                 self.ink_analysis_threader.stop()
+            
+            # Clean up GPIO manager
+            cleanup_gpio_manager()
             
             # Clean up database connections
             try:

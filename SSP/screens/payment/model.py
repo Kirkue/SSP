@@ -6,13 +6,7 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal
 from managers.hopper_manager import ChangeDispenser, DispenseThread, PIGPIO_AVAILABLE as HOPPER_GPIO_AVAILABLE
 from managers.payment_algorithm_manager import PaymentAlgorithmManager
 from database.db_manager import DatabaseManager
-
-try:
-    import pigpio
-    PAYMENT_GPIO_AVAILABLE = True
-except ImportError:
-    PAYMENT_GPIO_AVAILABLE = False
-    print("Warning: pigpio module not available. GPIO payment acceptance will be disabled.")
+from managers.gpio_manager import get_gpio_manager, PAYMENT_GPIO_AVAILABLE
 
 
 class GPIOPaymentThread(QThread):
@@ -231,13 +225,18 @@ class PaymentModel(QObject):
         self.payment_status_updated.emit("Click 'Enable Payment' to begin")
     
     def setup_gpio(self):
-        """Sets up the GPIO payment thread."""
-        self.gpio_thread = GPIOPaymentThread()
-        self.gpio_thread.coin_inserted.connect(self.on_coin_inserted)
-        self.gpio_thread.bill_inserted.connect(self.on_bill_inserted)
-        self.gpio_thread.payment_status.connect(self.payment_status_updated.emit)
-        self.gpio_thread.enable_acceptor.connect(self.gpio_thread.set_acceptor_state)
-        self.gpio_thread.start()
+        """Sets up the GPIO payment thread using centralized GPIO manager."""
+        # Use centralized GPIO manager instead of creating new thread
+        self.gpio_manager = get_gpio_manager()
+        self.gpio_manager.coin_inserted.connect(self.on_coin_inserted)
+        self.gpio_manager.bill_inserted.connect(self.on_bill_inserted)
+        self.gpio_manager.payment_status.connect(self.payment_status_updated.emit)
+        
+        # Start a simple timer to process coin timeouts
+        from PyQt5.QtCore import QTimer
+        self.coin_timeout_timer = QTimer()
+        self.coin_timeout_timer.timeout.connect(self.gpio_manager.process_coin_timeout)
+        self.coin_timeout_timer.start(100)  # Check every 100ms
     
     def enable_payment_mode(self):
         """Enables payment mode."""
@@ -245,8 +244,8 @@ class PaymentModel(QObject):
             return
         
         self.payment_ready = True
-        if self.gpio_thread:
-            self.gpio_thread.enable_acceptor.emit(True)
+        if hasattr(self, 'gpio_manager'):
+            self.gpio_manager.enable_payment()
         
         status_text = "Payment mode enabled - Use simulation buttons" if not PAYMENT_GPIO_AVAILABLE else "Payment mode enabled - Insert coins or bills"
         self.payment_status_updated.emit(status_text)
@@ -255,8 +254,8 @@ class PaymentModel(QObject):
     def disable_payment_mode(self):
         """Disables payment mode."""
         self.payment_ready = False
-        if self.gpio_thread:
-            self.gpio_thread.enable_acceptor.emit(False)
+        if hasattr(self, 'gpio_manager'):
+            self.gpio_manager.disable_payment()
         
         status_text = "Payment mode disabled" + (" (Simulation)" if not PAYMENT_GPIO_AVAILABLE else "")
         self.payment_status_updated.emit(status_text)
@@ -303,8 +302,10 @@ class PaymentModel(QObject):
             self.payment_button_enabled.emit(True)  # Enable payment button when sufficient payment
             
             if self.payment_ready:
-                self.payment_status_updated.emit("Payment sufficient - Ready to print")
+                self.payment_status_updated.emit("✅ Payment sufficient - Processing automatically...")
                 self.disable_payment_mode()
+                # Automatically proceed to payment completion
+                self._auto_complete_payment()
         else:
             remaining = self.total_cost - self.amount_received
             change_text = f"Remaining: ₱{remaining:.2f}"
@@ -327,6 +328,34 @@ class PaymentModel(QObject):
         if chg == 0:
             return f"Max payment we can receive: ₱{amt:.2f} (exact)"
         return f"Max payment we can receive: ₱{amt:.2f} (available ₱{chg:.2f})"
+    
+    def _auto_complete_payment(self):
+        """Automatically complete payment when sufficient amount is received."""
+        print("🔄 Auto-completing payment...")
+        
+        # Show processing message
+        self.payment_status_updated.emit("🔄 Dispensing change and preparing to print...")
+        
+        # Add a small delay to show the processing message
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(1500, self._proceed_with_payment)
+    
+    def _proceed_with_payment(self):
+        """Proceed with payment completion after delay."""
+        print("🔄 Proceeding with payment completion...")
+        
+        # Check if we have main_app reference
+        if hasattr(self, 'main_app') and self.main_app:
+            # Call the existing complete_payment method
+            success, message = self.complete_payment(self.main_app)
+            if success:
+                print("✅ Auto-payment completion successful")
+            else:
+                print(f"❌ Auto-payment completion failed: {message}")
+                self.payment_status_updated.emit(f"Payment error: {message}")
+        else:
+            print("❌ No main_app reference available for auto-payment completion")
+            self.payment_status_updated.emit("Payment completion failed - no app reference")
     
     def _check_payment_capabilities(self):
         """Check payment capabilities and emit suggestions to UI."""
@@ -659,20 +688,15 @@ class PaymentModel(QObject):
         """Called when leaving the payment screen."""
         print("Payment screen leaving")
         
-        # Stop GPIO thread safely
-        if hasattr(self, 'gpio_thread') and self.gpio_thread:
-            print("Stopping GPIO thread...")
-            try:
-                self.gpio_thread.stop()
-                if not self.gpio_thread.wait(2000):
-                    print("Warning: GPIO thread did not stop gracefully")
-                    self.gpio_thread.terminate()
-                    self.gpio_thread.wait(1000)
-            except Exception as e:
-                print(f"Error stopping GPIO thread: {e}")
-            finally:
-                # Clear the thread reference
-                self.gpio_thread = None
+        # Stop coin timeout timer
+        if hasattr(self, 'coin_timeout_timer'):
+            self.coin_timeout_timer.stop()
+            self.coin_timeout_timer = None
+        
+        # Disable payment but keep GPIO manager running for other screens
+        if hasattr(self, 'gpio_manager'):
+            self.gpio_manager.disable_payment()
+            print("GPIO Manager payment disabled (but manager kept alive for other screens)")
         
         # Stop any running dispense thread
         if hasattr(self, 'dispense_thread') and self.dispense_thread:

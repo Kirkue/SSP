@@ -7,7 +7,8 @@ from datetime import datetime
 class DatabaseManager:
     def __init__(self, db_name="ssp_database.db"):
         # Use the same database file as models.py
-        db_dir = os.path.join(os.path.dirname(__file__))
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        db_dir = os.path.join(base_dir, 'database')
         os.makedirs(db_dir, exist_ok=True)
         self.db_path = os.path.join(db_dir, db_name)
         self.conn = None
