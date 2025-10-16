@@ -77,8 +77,8 @@ class ThankYouModel(QObject):
         # Set initial state
         self.current_state = "waiting"
         self.status_updated.emit(
-            "PRINTING IN PROGRESS...",
-            "Please wait while your document is being printed."
+            "Thank you for printing with us",
+            "Your document is being processed."
         )
         self.redirect_timer.stop()
         
@@ -112,7 +112,7 @@ class ThankYouModel(QObject):
         """
         self.current_state = "completed"
         self.status_updated.emit(
-            "PRINTING COMPLETED",
+            "Thank you for printing with us",
             "Kindly collect your documents. We hope to see you again!"
         )
         
@@ -123,8 +123,8 @@ class ThankYouModel(QObject):
         """Update state to show that print job is in progress."""
         self.current_state = "waiting"
         self.status_updated.emit(
-            "PRINTING IN PROGRESS...",
-            "Please wait while your document is being printed."
+            "Thank you for printing with us",
+            "Your document is being processed."
         )
     
     def show_printing_error(self, message: str):
@@ -257,7 +257,7 @@ class ThankYouModel(QObject):
         # Update state
         self.current_state = "completed"
         self.status_updated.emit(
-            "PRINTING COMPLETED",
+            "Thank you for printing with us",
             "Kindly collect your documents. We hope to see you again!"
         )
         

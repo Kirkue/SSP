@@ -35,12 +35,12 @@ class ThankYouScreenView(QWidget):
         main_layout.setContentsMargins(50, 50, 50, 50)
         main_layout.setAlignment(Qt.AlignCenter)
 
-        self.status_label = QLabel("FILE PRINTING IN PROGRESS...")
+        self.status_label = QLabel("Thank you for printing with us")
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet("color: #36454F; font-size: 42px; font-weight: bold;")
 
-        self.subtitle_label = QLabel("Please wait a moment.")
+        self.subtitle_label = QLabel("Your document is being processed.")
         self.subtitle_label.setAlignment(Qt.AlignCenter)
         self.subtitle_label.setStyleSheet("color: #36454F; font-size: 24px;")
 
