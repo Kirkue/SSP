@@ -63,6 +63,9 @@ class USBController(QWidget):
         # Reset the returning flag when entering normally
         self.model.set_returning_from_file_browser(False)
         
+        # Reset USB manager state for new session
+        self.model.reset_usb_manager_state()
+        
         self.model.check_current_drives()
     
     def on_leave(self):

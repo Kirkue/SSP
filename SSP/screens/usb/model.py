@@ -287,3 +287,26 @@ class USBScreenModel(QObject):
         self.status_changed.emit("Ready for USB device...", 'monitoring')
         
         print("✅ USB state reset complete")
+    
+    def reset_usb_manager_state(self):
+        """Reset USB manager state for new session."""
+        try:
+            print("🔄 Resetting USB manager state for new session...")
+            
+            # Clear USB manager's known drives cache
+            if hasattr(self.usb_manager, 'last_known_drives'):
+                self.usb_manager.last_known_drives = set()
+                print("🔄 Cleared USB manager's known drives cache")
+            
+            # Reset USB manager's session data
+            if hasattr(self.usb_manager, 'files_in_use'):
+                self.usb_manager.files_in_use.clear()
+            if hasattr(self.usb_manager, 'operation_in_progress'):
+                self.usb_manager.operation_in_progress = False
+            if hasattr(self.usb_manager, 'current_usb_drive'):
+                self.usb_manager.current_usb_drive = None
+            
+            print("✅ USB manager state reset complete")
+            
+        except Exception as e:
+            print(f"⚠️ Error resetting USB manager state: {e}")

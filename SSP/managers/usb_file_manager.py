@@ -217,6 +217,9 @@ class USBFileManager:
         copied_files = []
 
         try:
+            # Create a new session directory for each USB drive
+            self._create_new_session()
+            
             # Set current drive and mark operation as in progress
             self.set_current_drive(source_dir)
             self.set_operation_in_progress(True)
@@ -464,6 +467,22 @@ class USBFileManager:
         self.operation_in_progress = False
         self.current_usb_drive = None
         print("✅ USB drive marked as safe to remove")
+    
+    def _create_new_session(self):
+        """Create a new session directory for each USB drive."""
+        # Generate new session ID with current timestamp
+        self.session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+        temp_base_dir = os.path.join(tempfile.gettempdir(), "PrintingSystem")
+        self.destination_dir = os.path.join(temp_base_dir, f"Session_{self.session_id}")
+        
+        # Create the new directory
+        os.makedirs(self.destination_dir, exist_ok=True)
+        print(f"✅ New session directory created: {self.destination_dir}")
+        
+        # Clear any previous session data
+        self.files_in_use.clear()
+        self.operation_in_progress = False
+        self.current_usb_drive = None
     
     def _auto_eject_usb_drive(self, usb_path):
         """Automatically eject USB drive after files are copied."""
