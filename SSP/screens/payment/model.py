@@ -454,22 +454,8 @@ class PaymentModel(QObject):
         
         return True, "Payment completed successfully"
     
-    def _connect_print_signals(self):
-        """Connect to print job signals from the printer manager."""
-        if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
-            try:
-                # Connect print job signals
-                self.main_app.printer_manager.print_job_successful.connect(self._on_print_success)
-                self.main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
-                self.main_app.printer_manager.print_job_waiting.connect(self._on_print_waiting)
-                print("DEBUG: Print job signals connected")
-            except Exception as e:
-                print(f"DEBUG: Error connecting print signals: {e}")
-    
-    def _on_print_waiting(self):
-        """Handle print job waiting state."""
-        print("DEBUG: Print job waiting for completion...")
-        self.payment_status_updated.emit("Print job submitted, waiting for completion...")
+    # Print job signals are now handled by the thank you screen
+    # No need to connect them here since the thank you screen will manage the entire print lifecycle
     
     def _on_dispensing_finished(self, result):
         """Handles the completion of change dispensing."""
@@ -613,75 +599,17 @@ class PaymentModel(QObject):
             }
             print(f"DEBUG: Print job details stored: {self.main_app.current_print_job}")
         
-        # Start the actual print job using the printer manager
-        if hasattr(self, 'main_app') and hasattr(self.main_app, 'printer_manager'):
-            print("DEBUG: Starting print job via printer manager...")
-            self.payment_status_updated.emit("Printing in progress...")
-            
-            # Connect to print job signals if not already connected
-            self._connect_print_signals()
-            
-            # Start the print job
-            self.main_app.printer_manager.print_file(
-                file_path=self.print_file_path,
-                copies=self.copies,
-                color_mode=self.color_mode,
-                selected_pages=self.selected_pages
-            )
-            
-            # Navigate to thank you screen to show printing status
-            print("DEBUG: Navigating to thank you screen to show printing status...")
-            self._navigate_to_thank_you()
-        else:
-            print("ERROR: No printer manager available")
-            self.payment_status_updated.emit("Error: Printer not available")
-            self._navigate_to_thank_you()
-    
-    def _on_print_success(self):
-        """Handles successful print completion."""
-        print("=" * 50)
-        print("DEBUG: _on_print_success called - Print job completed successfully")
-        print("DEBUG: Current thread:", threading.current_thread().name)
-        print("DEBUG: Payment model state - payment_ready:", getattr(self, 'payment_ready', 'N/A'))
-        print("DEBUG: Payment model state - payment_processing:", getattr(self, 'payment_processing', 'N/A'))
-        print("=" * 50)
-        
-        # Cancel timeout timer since we got the success signal
-        if hasattr(self, 'print_timeout_timer'):
-            self.print_timeout_timer.stop()
-            print("DEBUG: Print timeout timer cancelled")
-        
-        self.payment_status_updated.emit("Print completed successfully!")
-        print("DEBUG: Print job completed - thank you screen should handle the completion")
-        
-        # Emit payment completed signal to trigger the main app's print success handler
-        if hasattr(self, 'payment_info') and self.payment_info:
-            print("DEBUG: Emitting payment_completed signal for print success")
-            self.payment_completed.emit(self.payment_info)
-    
-    def _on_print_failed(self, error_message):
-        """Handles print job failure."""
-        print(f"DEBUG: _on_print_failed called - Print job failed: {error_message}")
-        # Cancel timeout timer since we got the failed signal
-        if hasattr(self, 'print_timeout_timer'):
-            self.print_timeout_timer.stop()
-            print("DEBUG: Print timeout timer cancelled")
-        self.payment_status_updated.emit(f"Print failed: {error_message}")
-        print("DEBUG: Print job failed - thank you screen should handle the error")
-        
-        # Emit payment completed signal to trigger the main app's print failure handler
-        if hasattr(self, 'payment_info') and self.payment_info:
-            print("DEBUG: Emitting payment_completed signal for print failure")
-            self.payment_completed.emit(self.payment_info)
-    
-    def _on_print_timeout(self):
-        """Handles print timeout - ensures navigation happens even if signals fail."""
-        print("=" * 50)
-        print("DEBUG: _on_print_timeout called - Print job timed out, forcing navigation")
-        print("DEBUG: Current thread:", threading.current_thread().name)
-        print("=" * 50)
-        self.payment_status_updated.emit("Print completed (timeout reached)")
+        # Don't start the print job here - let the thank you screen handle it
+        # The thank you screen will start the print job and monitor it properly
+        print("DEBUG: Print job details prepared, navigating to thank you screen...")
+        print("DEBUG: Thank you screen will start the print job and monitor completion")
         self._navigate_to_thank_you()
+    
+    # Print job success/failure handling is now done by the thank you screen
+    # The thank you screen will monitor lpstat and handle print completion
+    
+    # Print timeout handling is now done by the thank you screen
+    # The thank you screen will handle all print job monitoring and timeouts
     
     def _navigate_to_thank_you(self):
         """Navigate to thank you screen after all operations are complete."""
