@@ -188,8 +188,8 @@ class FileBrowserModel(QObject):
         return payment_data
     
     def go_back_to_usb(self):
-        """Navigates back to USB screen."""
-        self.navigation_requested.emit('usb')
+        """Navigates back to idle screen."""
+        self.navigation_requested.emit('idle')
     
     def cleanup(self):
         """Cleans up resources."""
