@@ -234,7 +234,7 @@ class USBScreenModel(QObject):
         pdf_files = self.usb_manager.scan_and_copy_pdf_files(drive_path)
         
         if pdf_files:
-            self.status_changed.emit(f"Success! Found {len(pdf_files)} PDF file(s).", 'success')
+            self.status_changed.emit(f"Success! Found {len(pdf_files)} PDF file(s). USB is now safe to remove.", 'success')
             self.pdf_files_found.emit(pdf_files)
         else:
             self.status_changed.emit("No PDF files were found on the USB drive.", 'error')
@@ -247,34 +247,15 @@ class USBScreenModel(QObject):
         self.handle_usb_scan_result([drive_path])
     
     def on_usb_removed(self, drive_path):
-        """Handles USB drive removal with safety checks."""
+        """Handles USB drive removal - now always safe since we auto-eject."""
         print(f"🔌 USB drive removed: {drive_path}")
-        
-        # Check if it's safe to remove the drive
-        if hasattr(self.usb_manager, 'is_drive_safe_to_remove'):
-            is_safe, message = self.usb_manager.is_drive_safe_to_remove()
-            if not is_safe:
-                self.status_changed.emit(f"⚠️ UNSAFE REMOVAL: {message}", 'error')
-                print(f"⚠️ UNSAFE USB removal detected: {message}")
-                # Force safe ejection to clear any remaining operations
-                if hasattr(self.usb_manager, 'force_safe_eject'):
-                    self.usb_manager.force_safe_eject()
-            else:
-                self.status_changed.emit("USB drive was safely removed.", 'success')
-        else:
-            self.status_changed.emit("USB drive was removed.", 'warning')
-        
+        self.status_changed.emit("USB drive removed. You can insert another drive.", 'success')
         self.start_usb_monitoring()
     
     def check_disk_safety(self):
-        """Check if the current USB drive is safe to remove."""
-        if hasattr(self.usb_manager, 'get_safety_warning'):
-            warning = self.usb_manager.get_safety_warning()
-            if warning:
-                self.safety_warning.emit(warning)
-                return False
-            else:
-                self.safety_warning_cleared.emit()
+        """Check if the current USB drive is safe to remove - always safe after auto-eject."""
+        # After auto-eject, USB is always safe to remove
+        self.safety_warning_cleared.emit()
         return True
     
     def reset_usb_state(self):

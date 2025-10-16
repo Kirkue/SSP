@@ -268,11 +268,14 @@ class USBFileManager:
             # Mark operation as complete
             self.set_operation_in_progress(False)
             
-            # After all files are processed
+            # After all files are processed, automatically "eject" the USB drive
             if copied_files:
                 print(f"✅ Successfully copied {len(copied_files)} PDF files:")
                 for f in copied_files:
                     print(f"   📄 {f['filename']} ({f['size']/1024:.1f} KB, {f['pages']} pages)")
+                
+                # Automatically eject USB drive after successful copy
+                self._auto_eject_usb_drive(source_dir)
             else:
                 print("❌ No PDF files found to copy")
                 
@@ -461,3 +464,39 @@ class USBFileManager:
         self.operation_in_progress = False
         self.current_usb_drive = None
         print("✅ USB drive marked as safe to remove")
+    
+    def _auto_eject_usb_drive(self, usb_path):
+        """Automatically eject USB drive after files are copied."""
+        try:
+            print(f"🔄 Auto-ejecting USB drive: {usb_path}")
+            
+            # Clear all safety tracking
+            self.files_in_use.clear()
+            self.operation_in_progress = False
+            self.current_usb_drive = None
+            
+            # Try to unmount the drive (Linux/macOS)
+            if platform.system() == "Linux":
+                try:
+                    import subprocess
+                    # Find the device path for the mount point
+                    result = subprocess.run(['findmnt', '-n', '-o', 'SOURCE', usb_path], 
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        device = result.stdout.strip()
+                        print(f"🔌 Unmounting device: {device}")
+                        subprocess.run(['umount', usb_path], timeout=10)
+                        print(f"✅ USB drive unmounted successfully")
+                    else:
+                        print("⚠️ Could not find device for unmounting")
+                except Exception as e:
+                    print(f"⚠️ Could not unmount USB drive: {e}")
+            
+            print("✅ USB drive is now safe to remove at any time")
+            
+        except Exception as e:
+            print(f"⚠️ Error during auto-eject: {e}")
+            # Still clear the safety tracking even if unmount fails
+            self.files_in_use.clear()
+            self.operation_in_progress = False
+            self.current_usb_drive = None

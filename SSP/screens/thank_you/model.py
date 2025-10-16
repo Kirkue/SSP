@@ -254,6 +254,9 @@ class ThankYouModel(QObject):
         # Hide admin override button since print succeeded
         self.admin_override_hidden.emit()
         
+        # Clean up temporary files after successful printing
+        self._cleanup_temp_files()
+        
         # Update state
         self.current_state = "completed"
         self.status_updated.emit(
@@ -263,6 +266,26 @@ class ThankYouModel(QObject):
         
         # Start 5-second redirect timer
         self.redirect_timer.start(5000)
+    
+    def _cleanup_temp_files(self):
+        """Clean up temporary files after successful printing."""
+        try:
+            # Get the USB file manager from main app
+            if hasattr(self, 'main_app') and self.main_app:
+                # Try to get USB file manager from main app
+                if hasattr(self.main_app, 'usb_manager'):
+                    if hasattr(self.main_app.usb_manager, 'cleanup_temp_files'):
+                        print("🧹 Cleaning up temporary files after printing...")
+                        self.main_app.usb_manager.cleanup_temp_files()
+                        print("✅ Temporary files cleaned up successfully")
+                    else:
+                        print("⚠️ USB manager does not have cleanup_temp_files method")
+                else:
+                    print("⚠️ Main app does not have usb_manager")
+            else:
+                print("⚠️ No main app reference available for cleanup")
+        except Exception as e:
+            print(f"⚠️ Error during temp file cleanup: {e}")
     
     def _start_print_job(self, main_app):
         """
