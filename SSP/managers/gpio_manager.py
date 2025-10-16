@@ -7,9 +7,11 @@ from PyQt5.QtCore import QObject, pyqtSignal, QThread
 try:
     import pigpio
     PIGPIO_AVAILABLE = True
+    PAYMENT_GPIO_AVAILABLE = True
     print("✅ pigpio library found. GPIO Manager is ENABLED.")
 except ImportError:
     PIGPIO_AVAILABLE = False
+    PAYMENT_GPIO_AVAILABLE = False
     print("⚠️ pigpio library not found. GPIO Manager will be SIMULATED.")
 
 class GPIOManager(QObject):
