@@ -119,17 +119,28 @@ class PDFButton(QPushButton):
                 border-radius: 8px; padding: 10px; text-align: left;
                 font-size: 13px; font-weight: bold; margin: 2px; height: 60px;
             }
+            QPushButton:disabled {
+                background-color: #4d80cc; color: #fff; border: 3px solid #6699ff;
+                border-radius: 8px; padding: 10px; text-align: left;
+                font-size: 13px; font-weight: bold; margin: 2px; height: 60px;
+                opacity: 0.8;
+            }
         """
 
     def on_click(self): 
+        # Prevent repeated clicks on already selected PDF
+        if self.is_selected:
+            return
         self.pdf_selected.emit(self.pdf_data)
     
     def set_selected(self, selected):
         self.is_selected = selected
         if selected: 
             self.setStyleSheet(self.get_selected_style())
+            self.setEnabled(False)  # Disable button when selected
         else: 
             self.setStyleSheet(self.get_normal_style())
+            self.setEnabled(True)   # Re-enable button when not selected
 
 class PDFPageWidget(QFrame):
     page_selected = pyqtSignal(int)

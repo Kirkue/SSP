@@ -8,7 +8,6 @@ class FileBrowserController(QWidget):
     
     # Signals for external communication
     pdf_selected = pyqtSignal(dict)  # pdf_data
-    navigation_requested = pyqtSignal(str)  # screen_name
     
     def __init__(self, main_app, parent=None):
         super().__init__(parent)
@@ -56,7 +55,7 @@ class FileBrowserController(QWidget):
     
     def _go_back_to_idle(self):
         """Handle back to idle button click - navigate to idle screen."""
-        self.navigation_requested.emit('idle')
+        self.main_app.show_screen('idle')
     
     def _continue_to_payment(self):
         """Handles continue to print options button click."""
