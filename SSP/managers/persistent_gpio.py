@@ -32,9 +32,10 @@ class PersistentGPIO(QObject):
         return cls._instance
     
     def __init__(self):
+        # Always call parent __init__ first
+        super().__init__()
         if hasattr(self, '_initialized'):
             return
-        super().__init__()
         self._initialized = True
         
         self.pi = None
