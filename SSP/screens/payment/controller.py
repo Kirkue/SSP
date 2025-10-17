@@ -74,7 +74,7 @@ class PaymentController(QWidget):
         else:
             # This is actual payment completion
             self.payment_completed.emit(payment_info)
-            self.view.set_buttons_enabled(False, False, False)
+            self.view.set_buttons_enabled(False)
     
     def _go_back(self):
         """Handles go back request from model."""
@@ -84,12 +84,12 @@ class PaymentController(QWidget):
     def set_payment_data(self, payment_data):
         """Sets payment data in the model."""
         self.model.set_payment_data(payment_data)
-        self.view.set_buttons_enabled(True, True, False)
+        self.view.set_buttons_enabled(True)
     
     def on_enter(self):
         """Called when the payment screen is shown."""
         self.model.on_enter()
-        self.view.set_buttons_enabled(True, True, False)
+        self.view.set_buttons_enabled(True)
     
     def on_leave(self):
         """Called when leaving the payment screen."""
