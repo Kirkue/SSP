@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QWidget, QMessageBox
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from .model import PaymentModel
 from .view import PaymentScreenView
 
@@ -17,6 +17,11 @@ class PaymentController(QWidget):
         self.model = PaymentModel(main_app)
         self.view = PaymentScreenView()
         
+        # Setup timeout timer (1 minute = 60000ms)
+        self.timeout_timer = QTimer()
+        self.timeout_timer.setSingleShot(True)
+        self.timeout_timer.timeout.connect(self._on_timeout)
+        
         # Inline suggestion only (no popup controller)
         
         # Set the view's layout as this controller's layout
@@ -33,6 +38,13 @@ class PaymentController(QWidget):
         # popup removed
         self.view.simulation_coin_clicked.connect(self.model.simulate_coin)
         self.view.simulation_bill_clicked.connect(self.model.simulate_bill)
+        
+        # Reset timeout on user interaction
+        self.view.back_button_clicked.connect(self._reset_timeout)
+        self.view.payment_mode_toggle_clicked.connect(self._reset_timeout)
+        self.view.payment_button_clicked.connect(self._reset_timeout)
+        self.view.simulation_coin_clicked.connect(self._reset_timeout)
+        self.view.simulation_bill_clicked.connect(self._reset_timeout)
         
         # --- Model -> Controller -> View ---
         self.model.payment_data_updated.connect(self.view.update_payment_data)
@@ -135,3 +147,25 @@ class PaymentController(QWidget):
 
     # When model recomputes the best suggestion, reflect it in the view via existing status signal
     # PaymentModel already emits payment_status_updated; hook that to update label too
+    
+    def on_enter(self):
+        """Called by main_app when this screen becomes active."""
+        # Start timeout timer (1 minute)
+        self.timeout_timer.start(60000)
+        print("⏰ Payment screen timeout started (1 minute)")
+    
+    def on_leave(self):
+        """Called by main_app when leaving this screen."""
+        # Stop timeout timer
+        self.timeout_timer.stop()
+    
+    def _on_timeout(self):
+        """Handle timeout - return to idle screen."""
+        print("⏰ Payment screen timeout - returning to idle screen")
+        self.main_app.show_screen('idle')
+    
+    def _reset_timeout(self):
+        """Reset the timeout timer (call on user activity)."""
+        self.timeout_timer.stop()
+        self.timeout_timer.start(60000)
+        print("⏰ Payment screen timeout reset")

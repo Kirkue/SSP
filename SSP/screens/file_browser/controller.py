@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QWidget, QMessageBox
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from .model import FileBrowserModel
 from .view import FileBrowserView
 
@@ -16,6 +16,11 @@ class FileBrowserController(QWidget):
         self.model = FileBrowserModel()
         self.view = FileBrowserView()
         
+        # Setup timeout timer (1 minute = 60000ms)
+        self.timeout_timer = QTimer()
+        self.timeout_timer.setSingleShot(True)
+        self.timeout_timer.timeout.connect(self._on_timeout)
+        
         # Set the view's layout as this controller's layout
         self.setLayout(self.view.main_layout)
         
@@ -28,6 +33,11 @@ class FileBrowserController(QWidget):
         self.view.back_to_idle_clicked.connect(self._go_back_to_idle)
         self.view.continue_button_clicked.connect(self._continue_to_payment)
         self.view.pdf_button_clicked.connect(self.model.select_pdf)
+        
+        # Reset timeout on user interaction
+        self.view.back_to_idle_clicked.connect(self._reset_timeout)
+        self.view.continue_button_clicked.connect(self._reset_timeout)
+        self.view.pdf_button_clicked.connect(self._reset_timeout)
         
         self.view.single_page_clicked.connect(self._set_single_page_view)
         self.view.multipage_clicked.connect(self._set_multipage_view)
@@ -198,3 +208,25 @@ class FileBrowserController(QWidget):
     def load_pdf_files(self, pdf_files):
         """Public method to load PDF files from external sources (like USB controller)."""
         self.model.load_pdf_files(pdf_files)
+    
+    def on_enter(self):
+        """Called by main_app when this screen becomes active."""
+        # Start timeout timer (1 minute)
+        self.timeout_timer.start(60000)
+        print("⏰ File browser screen timeout started (1 minute)")
+    
+    def on_leave(self):
+        """Called by main_app when leaving this screen."""
+        # Stop timeout timer
+        self.timeout_timer.stop()
+    
+    def _on_timeout(self):
+        """Handle timeout - return to idle screen."""
+        print("⏰ File browser screen timeout - returning to idle screen")
+        self.main_app.show_screen('idle')
+    
+    def _reset_timeout(self):
+        """Reset the timeout timer (call on user activity)."""
+        self.timeout_timer.stop()
+        self.timeout_timer.start(60000)
+        print("⏰ File browser screen timeout reset")

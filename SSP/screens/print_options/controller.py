@@ -1,6 +1,7 @@
 # screens/print_options/controller.py
 
 from PyQt5.QtWidgets import QWidget, QGridLayout, QMessageBox
+from PyQt5.QtCore import QTimer
 
 from .model import PrintOptionsModel
 from .view import PrintOptionsScreenView
@@ -14,6 +15,11 @@ class PrintOptionsController(QWidget):
         
         self.model = PrintOptionsModel()
         self.view = PrintOptionsScreenView()
+        
+        # Setup timeout timer (1 minute = 60000ms)
+        self.timeout_timer = QTimer()
+        self.timeout_timer.setSingleShot(True)
+        self.timeout_timer.timeout.connect(self._on_timeout)
         
         # Set the view's layout as this controller's layout
         self.setLayout(self.view.main_layout)
@@ -29,6 +35,14 @@ class PrintOptionsController(QWidget):
         self.view.color_mode_clicked.connect(self._set_color_mode)
         self.view.copies_decreased.connect(self._decrease_copies)
         self.view.copies_increased.connect(self._increase_copies)
+        
+        # Reset timeout on user interaction
+        self.view.back_button_clicked.connect(self._reset_timeout)
+        self.view.continue_button_clicked.connect(self._reset_timeout)
+        self.view.bw_mode_clicked.connect(self._reset_timeout)
+        self.view.color_mode_clicked.connect(self._reset_timeout)
+        self.view.copies_decreased.connect(self._reset_timeout)
+        self.view.copies_increased.connect(self._reset_timeout)
         
         # --- Model -> View ---
         self.model.cost_updated.connect(self.view.update_cost_display)
@@ -216,3 +230,25 @@ class PrintOptionsController(QWidget):
         while next_bill < cost:
             next_bill += 20
         return next_bill - cost
+    
+    def on_enter(self):
+        """Called by main_app when this screen becomes active."""
+        # Start timeout timer (1 minute)
+        self.timeout_timer.start(60000)
+        print("⏰ Print options screen timeout started (1 minute)")
+    
+    def on_leave(self):
+        """Called by main_app when leaving this screen."""
+        # Stop timeout timer
+        self.timeout_timer.stop()
+    
+    def _on_timeout(self):
+        """Handle timeout - return to idle screen."""
+        print("⏰ Print options screen timeout - returning to idle screen")
+        self.main_app.show_screen('idle')
+    
+    def _reset_timeout(self):
+        """Reset the timeout timer (call on user activity)."""
+        self.timeout_timer.stop()
+        self.timeout_timer.start(60000)
+        print("⏰ Print options screen timeout reset")

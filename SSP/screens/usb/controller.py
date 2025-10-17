@@ -16,6 +16,11 @@ class USBController(QWidget):
         self.model = USBScreenModel()
         self.view = USBScreenView()
         
+        # Setup timeout timer (1 minute = 60000ms)
+        self.timeout_timer = QTimer()
+        self.timeout_timer.setSingleShot(True)
+        self.timeout_timer.timeout.connect(self._on_timeout)
+        
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.view, 0, 0)
@@ -26,6 +31,8 @@ class USBController(QWidget):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller ---
         self.view.back_button_clicked.connect(self._go_back)
+        # Reset timeout on user interaction
+        self.view.back_button_clicked.connect(self._reset_timeout)
         
         # --- Model -> View ---
         self.model.status_changed.connect(self._update_status)
@@ -67,12 +74,30 @@ class USBController(QWidget):
         self.model.reset_usb_manager_state()
         
         self.model.check_current_drives()
+        
+        # Start timeout timer (1 minute)
+        self.timeout_timer.start(60000)
+        print("⏰ USB screen timeout started (1 minute)")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("⏹️ Leaving USB screen")
         self.model.stop_usb_monitoring()
         self.view.stop_blinking()
+        
+        # Stop timeout timer
+        self.timeout_timer.stop()
+    
+    def _on_timeout(self):
+        """Handle timeout - return to idle screen."""
+        print("⏰ USB screen timeout - returning to idle screen")
+        self.main_app.show_screen('idle')
+    
+    def _reset_timeout(self):
+        """Reset the timeout timer (call on user activity)."""
+        self.timeout_timer.stop()
+        self.timeout_timer.start(60000)
+        print("⏰ USB screen timeout reset")
     
     def reset_usb_state(self):
         """Public method to reset USB monitoring state."""
