@@ -88,8 +88,12 @@ class PaymentController(QWidget):
     
     def on_enter(self):
         """Called when the payment screen is shown."""
+        print("*** PAYMENT CONTROLLER ON_ENTER METHOD CALLED ***")
         print("=== PAYMENT CONTROLLER ON_ENTER START ===")
         print("DEBUG: Payment controller on_enter() called")
+        print(f"DEBUG: Controller type: {type(self)}")
+        print(f"DEBUG: Model type: {type(self.model)}")
+        print(f"DEBUG: View type: {type(self.view)}")
         print("DEBUG: About to call model.on_enter()")
         try:
             self.model.on_enter()

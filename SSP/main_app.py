@@ -250,8 +250,13 @@ class PrintingSystemApp(QMainWindow):
         print(f"DEBUG: show_screen - hasattr(new_widget, 'on_enter'): {hasattr(new_widget, 'on_enter')}")
         if hasattr(new_widget, 'on_enter'):
             print(f"DEBUG: show_screen - calling new_widget.on_enter()")
-            new_widget.on_enter()
-            print(f"DEBUG: show_screen - new_widget.on_enter() completed")
+            try:
+                new_widget.on_enter()
+                print(f"DEBUG: show_screen - new_widget.on_enter() completed")
+            except Exception as e:
+                print(f"ERROR: show_screen - new_widget.on_enter() failed with error: {e}")
+                import traceback
+                traceback.print_exc()
 
     def on_payment_completed(self, payment_info):
         """
