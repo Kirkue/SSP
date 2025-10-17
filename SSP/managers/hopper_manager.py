@@ -84,15 +84,20 @@ class HopperController:
         """Clean up GPIO resources."""
         try:
             # First disable the hopper to stop any ongoing operations
-            if self.pi and self.pi.connected:
+            if self.pi and hasattr(self.pi, 'connected') and self.pi.connected:
                 self._disable_hopper()
                 print(f"[{self.name}] Hopper disabled during cleanup")
+            elif self.pi is None:
+                print(f"[{self.name}] No pigpio connection to clean up")
             
             # Then cancel the callback
             if self.callback:
-                self.callback.cancel()
-                self.callback = None
-                print(f"[{self.name}] Callback cleaned up")
+                try:
+                    self.callback.cancel()
+                    self.callback = None
+                    print(f"[{self.name}] Callback cleaned up")
+                except Exception as callback_error:
+                    print(f"[{self.name}] Error canceling callback: {callback_error}")
                 
         except Exception as e:
             print(f"[{self.name}] Error during cleanup: {e}")

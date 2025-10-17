@@ -393,28 +393,38 @@ class PrintingSystemApp(QMainWindow):
         shuts down the SMS system. Called automatically on application close.
         """
         try:
-            # Stop USB monitoring thread
-            if hasattr(self, 'usb_screen') and hasattr(self.usb_screen, 'model'):
-                self.usb_screen.model.stop_usb_monitoring()
+            print("🧹 Starting application cleanup...")
             
-            # Clean up SMS system
-            cleanup_sms()
-            
-            # Stop thread managers
+            # Stop database operations first to prevent SQLite thread errors
             if hasattr(self, 'db_threader'):
+                print("🔄 Stopping database threader...")
                 self.db_threader.stop()
             if hasattr(self, 'ink_analysis_threader'):
+                print("🔄 Stopping ink analysis threader...")
                 self.ink_analysis_threader.stop()
             
-            # Clean up persistent GPIO
-            cleanup_persistent_gpio()
+            # Stop USB monitoring thread
+            if hasattr(self, 'usb_screen') and hasattr(self.usb_screen, 'model'):
+                print("🔄 Stopping USB monitoring...")
+                self.usb_screen.model.stop_usb_monitoring()
             
-            # Clean up database connections
+            # Clean up database connections before other cleanup
             try:
                 from utils.error_logger import cleanup_db_connections
+                print("🔄 Cleaning up database connections...")
                 cleanup_db_connections()
             except Exception as db_cleanup_error:
                 print(f"⚠️ Error cleaning up database connections: {db_cleanup_error}")
+            
+            # Clean up SMS system
+            print("🔄 Cleaning up SMS system...")
+            cleanup_sms()
+            
+            # Clean up persistent GPIO last
+            print("🔄 Cleaning up persistent GPIO...")
+            cleanup_persistent_gpio()
+            
+            print("✅ Application cleanup completed")
                 
         except Exception as e:
             print(f"❌ Error during cleanup: {e}")

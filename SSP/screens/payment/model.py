@@ -639,11 +639,23 @@ class PaymentModel(QObject):
                 'color_mode': self.color_mode
             }
             print(f"DEBUG: Print job details stored: {self.main_app.current_print_job}")
+            print(f"DEBUG: Verifying storage - main_app.current_print_job exists: {hasattr(self.main_app, 'current_print_job')}")
+            if hasattr(self.main_app, 'current_print_job'):
+                print(f"DEBUG: Stored value: {self.main_app.current_print_job}")
+        else:
+            print("DEBUG: No main_app available for storing print job details")
         
         # Don't start the print job here - let the thank you screen handle it
         # The thank you screen will start the print job and monitor it properly
         print("DEBUG: Print job details prepared, navigating to thank you screen...")
         print("DEBUG: Thank you screen will start the print job and monitor completion")
+        
+        # Final check before navigation
+        if hasattr(self, 'main_app') and hasattr(self.main_app, 'current_print_job'):
+            print(f"DEBUG: Final check - print job details still available: {self.main_app.current_print_job}")
+        else:
+            print("DEBUG: Final check - print job details NOT available before navigation")
+        
         self._navigate_to_thank_you()
     
     # Print job success/failure handling is now done by the thank you screen

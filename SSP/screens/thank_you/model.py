@@ -309,6 +309,9 @@ class ThankYouModel(QObject):
         print(f"DEBUG: main_app has current_print_job: {hasattr(main_app, 'current_print_job')}")
         if hasattr(main_app, 'current_print_job'):
             print(f"DEBUG: current_print_job value: {main_app.current_print_job}")
+        else:
+            print(f"DEBUG: current_print_job attribute does not exist")
+            print(f"DEBUG: main_app attributes: {[attr for attr in dir(main_app) if not attr.startswith('_')]}")
         
         if hasattr(main_app, 'current_print_job') and main_app.current_print_job:
             try:
