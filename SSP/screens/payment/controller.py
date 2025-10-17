@@ -118,7 +118,7 @@ class PaymentController(QWidget):
             self.model.amount_received_updated.emit(amount)
             self.model._update_payment_status()
             
-            print(f"Payment suggestion selected: ₱{amount:.2f}")
+            print(f"Payment suggestion selected: P{amount:.2f}")
             
         except Exception as e:
             print(f"Error handling suggestion selection: {e}")
@@ -131,7 +131,7 @@ class PaymentController(QWidget):
             self.model.amount_received_updated.emit(self.model.total_cost)
             self.model._update_payment_status()
             
-            print(f"Exact payment requested: ₱{self.model.total_cost:.2f}")
+            print(f"Exact payment requested: P{self.model.total_cost:.2f}")
             
         except Exception as e:
             print(f"Error handling exact payment request: {e}")
@@ -143,11 +143,11 @@ class PaymentController(QWidget):
         """Called by main_app when this screen becomes active."""
         # Start timeout timer (1 minute)
         self.timeout_timer.start(60000)
-        print("⏰ Payment screen timeout started (1 minute)")
+        print("TIMEOUT: Payment screen timeout started (1 minute)")
         
         # Automatically enable payment when entering the screen
         self.model.enable_payment_mode()
-        print("✅ Payment automatically enabled on screen entry")
+        print("SUCCESS: Payment automatically enabled on screen entry")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
@@ -156,11 +156,11 @@ class PaymentController(QWidget):
     
     def _on_timeout(self):
         """Handle timeout - return to idle screen."""
-        print("⏰ Payment screen timeout - returning to idle screen")
+        print("TIMEOUT: Payment screen timeout - returning to idle screen")
         self.main_app.show_screen('idle')
     
     def _reset_timeout(self):
         """Reset the timeout timer (call on user activity)."""
         self.timeout_timer.stop()
         self.timeout_timer.start(60000)
-        print("⏰ Payment screen timeout reset")
+        print("TIMEOUT: Payment screen timeout reset")
