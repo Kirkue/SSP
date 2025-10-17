@@ -196,9 +196,12 @@ class PrintingSystemApp(QMainWindow):
         # Connect payment signals after screens are ready
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
 
-    def check_paper_count_and_redirect(self):
+    def check_paper_count_and_redirect(self, allow_admin_access=False):
         """
         Check current paper count and redirect to error screen if needed.
+        
+        Args:
+            allow_admin_access: If True, allows navigation to admin screen even with low paper
         
         Returns:
             bool: True if redirected to error screen, False if paper is available
@@ -231,6 +234,12 @@ class PrintingSystemApp(QMainWindow):
         if hasattr(current_widget, 'on_leave'):
             current_widget.on_leave()
 
+        # Check paper count before switching to most screens (except admin and thank_you)
+        if screen_name not in ['admin', 'thank_you']:
+            if self.check_paper_count_and_redirect():
+                print(f"❌ Cannot navigate to {screen_name} - insufficient paper")
+                return
+        
         # Switch to the new screen
         target_index = self.SCREEN_MAP[screen_name]
         self.stacked_widget.setCurrentIndex(target_index)
@@ -256,10 +265,7 @@ class PrintingSystemApp(QMainWindow):
         """
         print(f"Payment completed. Starting print job for {payment_info['pdf_data']['filename']}")
         
-        # Check paper count before starting print job
-        if self.check_paper_count_and_redirect():
-            print("❌ Cannot proceed with print job - insufficient paper")
-            return
+        # Paper count check is now handled in show_screen method
         
         self.printer_manager.print_file(
             file_path=payment_info['pdf_data']['path'],
