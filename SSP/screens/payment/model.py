@@ -651,14 +651,15 @@ class PaymentModel(QObject):
         self.setup_gpio()
         
         # Reset payment state
-        self.payment_ready = False
         self.amount_received = 0
         self.cash_received = {}
         self.payment_processing = False
         
         self.amount_received_updated.emit(0)
         self.change_updated.emit(0, "")
-        self.payment_status_updated.emit("Click 'Enable Payment' to begin")
+        
+        # Automatically enable payment mode
+        self.enable_payment_mode()
     
     def on_leave(self):
         """Called when leaving the payment screen."""
