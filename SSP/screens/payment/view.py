@@ -188,20 +188,7 @@ class PaymentScreenView(QWidget):
             # Payment complete, no change
             self.change_label.setStyleSheet("QLabel { color: #155724; font-size: 18px; font-weight: bold; padding: 10px; background-color: #d4edda; border-radius: 6px; }")
     
-    def set_payment_button_enabled(self, enabled):
-        """Enables or disables the payment button."""
-        self.payment_btn.setEnabled(enabled)
     
-    def set_enable_payment_button_text(self, text):
-        """Sets the text for the enable/disable payment button."""
-        self.enable_payment_btn.setText(text)
-    
-    def set_enable_payment_button_style(self, is_enabled):
-        """Sets the style for the enable/disable payment button."""
-        if is_enabled:
-            self.enable_payment_btn.setStyleSheet(self.get_disable_payment_button_style())
-        else:
-            self.enable_payment_btn.setStyleSheet(self.get_enable_payment_button_style())
     
     def set_buttons_enabled(self, back_enabled):
         """Sets the enabled state of all buttons."""

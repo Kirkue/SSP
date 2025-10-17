@@ -48,8 +48,6 @@ class PaymentController(QWidget):
         self.model.amount_received_updated.connect(self.view.update_amount_received)
         self.model.change_updated.connect(self.view.update_change_display)
         self.model.suggestion_updated.connect(self.view.update_inline_suggestion)
-        self.model.payment_button_enabled.connect(self.view.set_payment_button_enabled)
-        self.model.payment_mode_changed.connect(self.view.set_payment_mode_button_state)
         self.model.payment_completed.connect(self._handle_payment_completed)
         self.model.go_back_requested.connect(self._go_back)
     
