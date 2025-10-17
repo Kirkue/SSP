@@ -128,6 +128,23 @@ class PrintingSystemApp(QMainWindow):
 
         # Show idle screen as initial screen
         self.show_screen('idle')
+        
+        # Connect printer manager signals immediately after initialization
+        print("DEBUG: Connecting printer manager signals after initialization")
+        from PyQt5.QtCore import Qt
+        self.printer_manager.print_job_successful.connect(self.on_print_successful, Qt.QueuedConnection)
+        self.printer_manager.print_job_failed.connect(self.on_print_failed, Qt.QueuedConnection)
+        self.printer_manager.print_job_waiting.connect(self.on_print_waiting, Qt.QueuedConnection)
+        print("DEBUG: Printer manager signals connected successfully with QueuedConnection")
+        
+        # Test signal connection
+        print("DEBUG: Testing signal connection...")
+        try:
+            # This should trigger the callback immediately
+            self.printer_manager.print_job_successful.emit()
+            print("DEBUG: Test signal emission successful")
+        except Exception as e:
+            print(f"DEBUG: Test signal emission failed: {e}")
 
         # Apply application-wide styles
         self.setStyleSheet("""
@@ -179,28 +196,8 @@ class PrintingSystemApp(QMainWindow):
             print(f"CMYK levels updated: {result['cmyk_levels']}")
             self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
 
-        # Connect payment and printing signals after screens are ready
+        # Connect payment signals after screens are ready
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
-        print("DEBUG: Connecting printer manager signals")
-        from PyQt5.QtCore import Qt
-        self.printer_manager.print_job_successful.connect(self.on_print_successful, Qt.QueuedConnection)
-        self.printer_manager.print_job_failed.connect(self.on_print_failed, Qt.QueuedConnection)
-        self.printer_manager.print_job_waiting.connect(self.on_print_waiting, Qt.QueuedConnection)
-        print("DEBUG: Printer manager signals connected successfully with QueuedConnection")
-        
-        # Test signal connection
-        print(f"DEBUG: Signal connection test - on_print_successful method: {self.on_print_successful}")
-        print(f"DEBUG: Signal connection test - printer_manager: {self.printer_manager}")
-        print(f"DEBUG: Signal connection test - print_job_successful signal: {self.printer_manager.print_job_successful}")
-        
-        # Test if signal connection is working
-        print("DEBUG: Testing signal connection...")
-        try:
-            # This should trigger the callback immediately
-            self.printer_manager.print_job_successful.emit()
-            print("DEBUG: Test signal emission successful")
-        except Exception as e:
-            print(f"DEBUG: Test signal emission failed: {e}")
 
     def check_paper_count_and_redirect(self):
         """
