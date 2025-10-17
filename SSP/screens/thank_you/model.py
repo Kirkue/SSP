@@ -68,10 +68,12 @@ class ThankYouModel(QObject):
         Args:
             main_app: Reference to main application window
         """
+        print(f"DEBUG: Thank you screen on_enter called")
         self.main_app = main_app
         
         # Prevent duplicate print job starts
         if self.print_job_started:
+            print(f"DEBUG: Print job already started, skipping")
             return
         
         # Set initial state
@@ -87,9 +89,11 @@ class ThankYouModel(QObject):
         
         # Connect to printer manager signals
         if hasattr(main_app, 'printer_manager'):
+            print(f"DEBUG: Connecting to printer manager signals")
             try:
                 main_app.printer_manager.print_job_successful.connect(self._on_print_success)
                 main_app.printer_manager.print_job_failed.connect(self._on_print_failed)
+                print(f"DEBUG: Printer signals connected successfully")
             except Exception as e:
                 print(f"❌ Error connecting printer signals: {e}")
             
@@ -301,8 +305,14 @@ class ThankYouModel(QObject):
         Args:
             main_app: Main application window with current_print_job attribute
         """
+        print(f"DEBUG: _start_print_job called")
+        print(f"DEBUG: main_app has current_print_job: {hasattr(main_app, 'current_print_job')}")
+        if hasattr(main_app, 'current_print_job'):
+            print(f"DEBUG: current_print_job value: {main_app.current_print_job}")
+        
         if hasattr(main_app, 'current_print_job') and main_app.current_print_job:
             try:
+                print(f"DEBUG: Starting print job with details: {main_app.current_print_job}")
                 main_app.printer_manager.print_file(
                     file_path=main_app.current_print_job['file_path'],
                     selected_pages=main_app.current_print_job['selected_pages'],
@@ -310,10 +320,12 @@ class ThankYouModel(QObject):
                     color_mode=main_app.current_print_job['color_mode']
                 )
                 self.print_job_started = True
+                print(f"DEBUG: Print job started successfully")
             except Exception as e:
                 print(f"❌ Error starting print job: {e}")
                 self.show_printing_error(f"Failed to start print job: {e}")
         else:
+            print(f"DEBUG: No print job details available")
             self.show_printing_error("No print job details available")
     
     def _check_print_status(self):
