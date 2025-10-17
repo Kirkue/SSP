@@ -340,12 +340,19 @@ class PrintingSystemApp(QMainWindow):
         """
         print(f"DEBUG: _on_ink_analysis_completed called with operation: {operation}")
         
-        if operation.error:
-            print(f"⚠️ Ink analysis failed: {operation.error}")
-        else:
-            result = operation.result
-            if result.get('success', False) and result.get('database_updated', False):
+        # Handle both dictionary and object formats
+        if isinstance(operation, dict):
+            # Direct dictionary result
+            if operation.get('success', False) and operation.get('database_updated', False):
                 print("✅ Ink levels updated in database")
+        else:
+            # Object format
+            if hasattr(operation, 'error') and operation.error:
+                print(f"⚠️ Ink analysis failed: {operation.error}")
+            else:
+                result = operation.result if hasattr(operation, 'result') else operation
+                if result.get('success', False) and result.get('database_updated', False):
+                    print("✅ Ink levels updated in database")
         
         print(f"DEBUG: Ink analysis completed, database updates already done after print success")
         
