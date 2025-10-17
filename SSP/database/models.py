@@ -98,6 +98,23 @@ def init_db():
     ''')
     print("OK - Created settings table")
 
+    # Initialize default settings if they don't exist
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('paper_count', '100')")
+    print("OK - Initialized paper_count setting")
+    
+    # Initialize default CMYK ink levels if none exist
+    cursor.execute("SELECT COUNT(*) FROM cmyk_ink_levels")
+    cmyk_count = cursor.fetchone()[0]
+    if cmyk_count == 0:
+        from datetime import datetime
+        cursor.execute("""
+            INSERT INTO cmyk_ink_levels (cyan_level, magenta_level, yellow_level, black_level, timestamp, last_updated)
+            VALUES (100.0, 100.0, 100.0, 100.0, ?, ?)
+        """, (datetime.now(), datetime.now()))
+        print("OK - Initialized default CMYK ink levels (100%)")
+    else:
+        print("OK - CMYK ink levels already exist")
+
     conn.commit()
     conn.close()
     print("OK - Database initialization complete")
