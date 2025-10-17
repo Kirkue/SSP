@@ -279,18 +279,6 @@ class ChangeDispenser:
                 return False
         return True
 
-    def cleanup_all_hoppers(self):
-        """Clean up all hopper resources."""
-        for name, hopper in self.hoppers.items():
-            try:
-                if hopper:  # Add null check
-                    hopper.cleanup()
-                    print(f"Cleaned up hopper {name}")
-            except Exception as e:
-                print(f"Error cleaning up hopper {name}: {e}")
-        
-        # Clear the hoppers dictionary after cleanup
-        self.hoppers.clear()
 
     def __del__(self):
         """Destructor to ensure cleanup."""
