@@ -129,7 +129,6 @@ class HopperController:
             if not self.sensor_active:
                 self.sensor_active = True
                 self.last_sensor_change = current_time
-                print(f"[{self.name}] SENSOR: Coin entering sensor")
         else:  # Rising edge - coin cleared
             if self.sensor_active:
                 self.sensor_active = False
