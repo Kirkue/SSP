@@ -630,18 +630,25 @@ class PaymentModel(QObject):
         print(f"DEBUG: Print job details - file: {self.print_file_path}, pages: {self.selected_pages}, copies: {self.copies}, mode: {self.color_mode}")
         
         # Store print job details in main app for thank you screen to access
+        print(f"DEBUG: Checking main_app availability - hasattr(self, 'main_app'): {hasattr(self, 'main_app')}")
         if hasattr(self, 'main_app'):
+            print(f"DEBUG: main_app object: {self.main_app}")
             print("DEBUG: Storing print job details in main app...")
-            self.main_app.current_print_job = {
-                'file_path': self.print_file_path,
-                'selected_pages': self.selected_pages,
-                'copies': self.copies,
-                'color_mode': self.color_mode
-            }
-            print(f"DEBUG: Print job details stored: {self.main_app.current_print_job}")
-            print(f"DEBUG: Verifying storage - main_app.current_print_job exists: {hasattr(self.main_app, 'current_print_job')}")
-            if hasattr(self.main_app, 'current_print_job'):
-                print(f"DEBUG: Stored value: {self.main_app.current_print_job}")
+            try:
+                self.main_app.current_print_job = {
+                    'file_path': self.print_file_path,
+                    'selected_pages': self.selected_pages,
+                    'copies': self.copies,
+                    'color_mode': self.color_mode
+                }
+                print(f"DEBUG: Print job details stored: {self.main_app.current_print_job}")
+                print(f"DEBUG: Verifying storage - main_app.current_print_job exists: {hasattr(self.main_app, 'current_print_job')}")
+                if hasattr(self.main_app, 'current_print_job'):
+                    print(f"DEBUG: Stored value: {self.main_app.current_print_job}")
+                else:
+                    print("DEBUG: ERROR - current_print_job attribute was not created")
+            except Exception as storage_error:
+                print(f"DEBUG: ERROR storing print job details: {storage_error}")
         else:
             print("DEBUG: No main_app available for storing print job details")
         
@@ -656,7 +663,14 @@ class PaymentModel(QObject):
         else:
             print("DEBUG: Final check - print job details NOT available before navigation")
         
+        print(f"DEBUG: About to call _navigate_to_thank_you")
         self._navigate_to_thank_you()
+        
+        # Check after navigation
+        if hasattr(self, 'main_app') and hasattr(self.main_app, 'current_print_job'):
+            print(f"DEBUG: After navigation - print job details still available: {self.main_app.current_print_job}")
+        else:
+            print("DEBUG: After navigation - print job details NOT available")
     
     # Print job success/failure handling is now done by the thank you screen
     # The thank you screen will monitor lpstat and handle print completion
