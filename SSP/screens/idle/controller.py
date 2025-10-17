@@ -7,6 +7,13 @@ from .model import IdleModel
 from .view import IdleScreenView
 from screens.dialogs.pin_dialog import PinDialogController as PinDialog
 
+# Import GPIO functionality for manual acceptor control
+try:
+    import pigpio
+    GPIO_AVAILABLE = True
+except ImportError:
+    GPIO_AVAILABLE = False
+
 class IdleController(QWidget):
     """Manages the Idle screen's logic and UI."""
     
@@ -57,11 +64,60 @@ class IdleController(QWidget):
         """Shows a message to the user."""
         print(f"{title}: {text}")
     
+    def _disable_acceptors(self):
+        """Manually disable coin and bill acceptors to ensure they are turned off."""
+        print("IDLE: Manually disabling acceptors...")
+        
+        if not GPIO_AVAILABLE:
+            print("IDLE: GPIO not available - acceptors disabled (simulation mode)")
+            return
+        
+        try:
+            # Create a temporary GPIO connection for manual control
+            pi = pigpio.pi()
+            if not pi.connected:
+                print("IDLE: Could not connect to pigpio daemon")
+                return
+            
+            # GPIO pin definitions (matching persistent GPIO)
+            COIN_INHIBIT_PIN = 22  # Coin acceptor inhibit pin
+            BILL_INHIBIT_PIN = 23   # Bill acceptor inhibit pin
+            
+            # Disable coin acceptor (HIGH = enabled, LOW = disabled)
+            pi.set_mode(COIN_INHIBIT_PIN, pigpio.OUTPUT)
+            pi.write(COIN_INHIBIT_PIN, 0)  # LOW = disabled
+            print("IDLE: Coin acceptor disabled")
+            
+            # Disable bill acceptor (LOW = enabled, HIGH = disabled)  
+            pi.set_mode(BILL_INHIBIT_PIN, pigpio.OUTPUT)
+            pi.write(BILL_INHIBIT_PIN, 1)  # HIGH = disabled
+            print("IDLE: Bill acceptor disabled")
+            
+            # Small delay to ensure state change
+            import time
+            time.sleep(0.1)
+            
+            # Clean up the temporary connection
+            pi.stop()
+            print("IDLE: Acceptors manually disabled successfully")
+            
+        except Exception as e:
+            print(f"IDLE: Error manually disabling acceptors: {e}")
+            # Try to clean up even if there was an error
+            try:
+                if 'pi' in locals():
+                    pi.stop()
+            except:
+                pass
+    
     # --- Public API for main_app ---
     
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
         print("Idle screen entered.")
+        
+        # Manually disable acceptors to ensure they are turned off
+        self._disable_acceptors()
         
         # Check paper count before allowing normal operation
         if self.main_app.check_paper_count_and_redirect():
@@ -72,3 +128,5 @@ class IdleController(QWidget):
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("Idle screen left.")
+        # Ensure acceptors are still disabled when leaving idle screen
+        self._disable_acceptors()

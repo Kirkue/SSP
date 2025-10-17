@@ -150,6 +150,8 @@ class PaymentController(QWidget):
         print("TIMEOUT: Payment screen timeout - returning to idle screen")
         # Properly clean up payment screen before navigating away
         self.on_leave()
+        # Additional safety: manually disable acceptors as backup
+        self._manual_disable_acceptors()
         self.main_app.show_screen('idle')
     
     def _reset_timeout(self):
@@ -157,3 +159,49 @@ class PaymentController(QWidget):
         self.timeout_timer.stop()
         self.timeout_timer.start(60000)
         print("TIMEOUT: Payment screen timeout reset")
+    
+    def _manual_disable_acceptors(self):
+        """Manually disable acceptors as a safety backup."""
+        print("PAYMENT: Manually disabling acceptors as safety backup...")
+        
+        try:
+            import pigpio
+            
+            # Create a temporary GPIO connection for manual control
+            pi = pigpio.pi()
+            if not pi.connected:
+                print("PAYMENT: Could not connect to pigpio daemon for manual disable")
+                return
+            
+            # GPIO pin definitions
+            COIN_INHIBIT_PIN = 22  # Coin acceptor inhibit pin
+            BILL_INHIBIT_PIN = 23   # Bill acceptor inhibit pin
+            
+            # Disable coin acceptor (HIGH = enabled, LOW = disabled)
+            pi.set_mode(COIN_INHIBIT_PIN, pigpio.OUTPUT)
+            pi.write(COIN_INHIBIT_PIN, 0)  # LOW = disabled
+            print("PAYMENT: Coin acceptor manually disabled")
+            
+            # Disable bill acceptor (LOW = enabled, HIGH = disabled)  
+            pi.set_mode(BILL_INHIBIT_PIN, pigpio.OUTPUT)
+            pi.write(BILL_INHIBIT_PIN, 1)  # HIGH = disabled
+            print("PAYMENT: Bill acceptor manually disabled")
+            
+            # Small delay to ensure state change
+            import time
+            time.sleep(0.1)
+            
+            # Clean up the temporary connection
+            pi.stop()
+            print("PAYMENT: Acceptors manually disabled successfully")
+            
+        except ImportError:
+            print("PAYMENT: GPIO not available - acceptors disabled (simulation mode)")
+        except Exception as e:
+            print(f"PAYMENT: Error manually disabling acceptors: {e}")
+            # Try to clean up even if there was an error
+            try:
+                if 'pi' in locals():
+                    pi.stop()
+            except:
+                pass
