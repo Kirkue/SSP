@@ -897,35 +897,6 @@ class PaymentModel(QObject):
             except Exception as nav_error:
                 print(f"ERROR: Error navigating to thank you screen: {nav_error}")
     
-    def _navigate_to_thank_you(self):
-        """Navigate to thank you screen."""
-        print("Navigating to thank you screen...")
-        
-        try:
-            # Emit payment completed signal with safe data
-            payment_info = {
-                'amount_received': getattr(self, 'amount_received', 0),
-                'total_cost': getattr(self, 'total_cost', 0),
-                'change_given': getattr(self, 'amount_received', 0) - getattr(self, 'total_cost', 0),
-                'payment_data': getattr(self, 'payment_data', {})
-            }
-            self.payment_completed.emit(payment_info)
-            print("SUCCESS: Payment completed signal emitted")
-            
-        except Exception as e:
-            print(f"ERROR: Error navigating to thank you: {e}")
-            # Try to emit a minimal payment completed signal
-            try:
-                minimal_payment_info = {
-                    'amount_received': 0,
-                    'total_cost': 0,
-                    'change_given': 0,
-                    'payment_data': {}
-                }
-                self.payment_completed.emit(minimal_payment_info)
-                print("SUCCESS: Minimal payment completed signal emitted")
-            except Exception as minimal_error:
-                print(f"ERROR: Error emitting minimal payment signal: {minimal_error}")
 
     def reset_payment_state(self):
         """Reset payment state for new transactions."""
