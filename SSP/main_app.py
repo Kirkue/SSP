@@ -246,8 +246,12 @@ class PrintingSystemApp(QMainWindow):
         
         # Call on_enter lifecycle method for new screen
         new_widget = self.stacked_widget.currentWidget()
+        print(f"DEBUG: show_screen - new_widget: {new_widget}")
+        print(f"DEBUG: show_screen - hasattr(new_widget, 'on_enter'): {hasattr(new_widget, 'on_enter')}")
         if hasattr(new_widget, 'on_enter'):
+            print(f"DEBUG: show_screen - calling new_widget.on_enter()")
             new_widget.on_enter()
+            print(f"DEBUG: show_screen - new_widget.on_enter() completed")
 
     def on_payment_completed(self, payment_info):
         """

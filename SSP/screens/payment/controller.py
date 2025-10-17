@@ -88,8 +88,12 @@ class PaymentController(QWidget):
     
     def on_enter(self):
         """Called when the payment screen is shown."""
+        print("DEBUG: Payment controller on_enter() called")
+        print("DEBUG: About to call model.on_enter()")
         self.model.on_enter()
+        print("DEBUG: model.on_enter() completed")
         self.view.set_buttons_enabled(True)
+        print("DEBUG: Payment controller on_enter() completed")
     
     def on_leave(self):
         """Called when leaving the payment screen."""
