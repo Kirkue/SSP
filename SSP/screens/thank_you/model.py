@@ -164,12 +164,9 @@ class ThankYouModel(QObject):
             f"Error: {clean_message}\nPlease contact an administrator."
         )
         
-        # Send SMS notification (backup method)
-        try:
-            from managers.sms_manager import send_printing_error_sms
-            send_printing_error_sms(message)
-        except Exception as sms_error:
-            print(f"⚠️ Failed to send SMS notification: {sms_error}")
+        # SMS notification disabled for print job failures (not critical enough)
+        # Only log to database for tracking
+        print(f"⚠️ Print job failure (SMS disabled): {clean_message}")
         
         # Log error to database
         try:

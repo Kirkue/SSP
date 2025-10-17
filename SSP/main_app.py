@@ -98,6 +98,9 @@ class PrintingSystemApp(QMainWindow):
         # Initialize printer manager (no dependencies)
         self.printer_manager = PrinterManager()
         
+        # Track low paper alert to prevent multiple SMS
+        self.low_paper_alert_sent = False
+        
         # Initialize remaining screens that depend on other components
         try:
             print("🔄 Initializing data viewer screen...")
@@ -398,9 +401,13 @@ class PrintingSystemApp(QMainWindow):
                         updated_count = self.admin_screen.get_paper_count()
                         print(f"DEBUG: Verified paper count in database: {updated_count}")
                         
-                        # Check for low paper alert
-                        if new_count <= 10:
+                        # Check for low paper alert (only send once)
+                        if new_count <= 10 and not self.low_paper_alert_sent:
                             print(f"⚠️ Low paper alert: {new_count} sheets remaining")
+                            self.low_paper_alert_sent = True
+                        elif new_count > 10:
+                            # Reset flag if paper count goes back above threshold
+                            self.low_paper_alert_sent = False
                     else:
                         print("❌ Failed to update paper count")
                 else:
