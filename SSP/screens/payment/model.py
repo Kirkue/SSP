@@ -661,6 +661,7 @@ class PaymentModel(QObject):
     
     def on_enter(self):
         """Called when the payment screen is shown."""
+        print("=== PAYMENT MODEL ON_ENTER START ===")
         print("Payment screen entered")
         print("DEBUG: About to call setup_gpio()")
         try:
@@ -680,6 +681,7 @@ class PaymentModel(QObject):
         # Automatically enable payment mode
         print("DEBUG: About to call enable_payment_mode()")
         self.enable_payment_mode()
+        print("=== PAYMENT MODEL ON_ENTER END ===")
     
     def on_leave(self):
         """Called when leaving the payment screen."""
