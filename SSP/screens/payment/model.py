@@ -242,21 +242,26 @@ class PaymentModel(QObject):
     
     def setup_gpio(self):
         """Setup persistent GPIO for payment processing."""
+        print("DEBUG: setup_gpio() method called")
         # Use persistent GPIO service instead of creating new thread
+        print("DEBUG: About to call get_persistent_gpio()")
         self.persistent_gpio = get_persistent_gpio()
         print(f"DEBUG: Persistent GPIO obtained: {self.persistent_gpio}")
         print(f"DEBUG: Persistent GPIO enabled: {getattr(self.persistent_gpio, 'enabled', 'N/A')}")
         print(f"DEBUG: Persistent GPIO available: {getattr(self.persistent_gpio, 'gpio_available', 'N/A')}")
         
+        print("DEBUG: About to connect signals")
         self.persistent_gpio.coin_inserted.connect(self.on_coin_inserted)
         self.persistent_gpio.bill_inserted.connect(self.on_bill_inserted)
         self.persistent_gpio.payment_status.connect(self.payment_status_updated.emit)
+        print("DEBUG: Signals connected successfully")
         
         # Setup coin timeout timer for persistent GPIO
         from PyQt5.QtCore import QTimer
         self.coin_timeout_timer = QTimer()
         self.coin_timeout_timer.timeout.connect(self.persistent_gpio.process_coin_timeout)
         self.coin_timeout_timer.start(100)  # Check every 100ms
+        print("DEBUG: Coin timeout timer started")
     
     def enable_payment_mode(self):
         """Enables payment mode."""
@@ -268,7 +273,9 @@ class PaymentModel(QObject):
         self.payment_ready = True
         print(f"DEBUG: payment_ready set to True")
         
+        print(f"DEBUG: Checking if persistent_gpio exists: {hasattr(self, 'persistent_gpio')}")
         if hasattr(self, 'persistent_gpio'):
+            print(f"DEBUG: persistent_gpio value: {self.persistent_gpio}")
             print(f"DEBUG: Calling persistent_gpio.enable_payment()")
             self.persistent_gpio.enable_payment()
             print("✅ Payment mode enabled via persistent GPIO")
@@ -655,7 +662,12 @@ class PaymentModel(QObject):
     def on_enter(self):
         """Called when the payment screen is shown."""
         print("Payment screen entered")
-        self.setup_gpio()
+        print("DEBUG: About to call setup_gpio()")
+        try:
+            self.setup_gpio()
+            print("DEBUG: setup_gpio() completed successfully")
+        except Exception as e:
+            print(f"DEBUG: setup_gpio() failed with error: {e}")
         
         # Reset payment state
         self.amount_received = 0
@@ -666,6 +678,7 @@ class PaymentModel(QObject):
         self.change_updated.emit(0, "")
         
         # Automatically enable payment mode
+        print("DEBUG: About to call enable_payment_mode()")
         self.enable_payment_mode()
     
     def on_leave(self):
