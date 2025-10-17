@@ -181,9 +181,11 @@ class PrintingSystemApp(QMainWindow):
 
         # Connect payment and printing signals after screens are ready
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
+        print("DEBUG: Connecting printer manager signals")
         self.printer_manager.print_job_successful.connect(self.on_print_successful)
         self.printer_manager.print_job_failed.connect(self.on_print_failed)
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting)
+        print("DEBUG: Printer manager signals connected successfully")
 
     def check_paper_count_and_redirect(self):
         """
@@ -267,6 +269,11 @@ class PrintingSystemApp(QMainWindow):
         print("✅ Print job successfully completed")
         print(f"DEBUG: on_print_successful called, about to trigger ink analysis")
         
+        # Update database immediately after print success (don't wait for ink analysis)
+        print(f"DEBUG: Updating database immediately after print success")
+        self._update_paper_count_after_print()
+        self._update_coin_inventory_after_print()
+        
         # Trigger ink analysis for the printed job (if print job info available)
         self._trigger_ink_analysis()
         
@@ -334,13 +341,7 @@ class PrintingSystemApp(QMainWindow):
             if result.get('success', False) and result.get('database_updated', False):
                 print("✅ Ink levels updated in database")
         
-        print(f"DEBUG: About to call _update_paper_count_after_print()")
-        # Update paper count after successful printing
-        self._update_paper_count_after_print()
-        
-        print(f"DEBUG: About to call _update_coin_inventory_after_print()")
-        # Update coin inventory after successful printing (for received coins)
-        self._update_coin_inventory_after_print()
+        print(f"DEBUG: Ink analysis completed, database updates already done after print success")
         
         # Always clean up temp PDF after analysis completes
         self.printer_manager.cleanup_last_temp_pdf()

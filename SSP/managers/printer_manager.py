@@ -659,9 +659,12 @@ class PrinterManager(QObject):
         Args:
             temp_pdf_path: Path to temporary PDF file (needs to be kept for ink analysis)
         """
+        print(f"DEBUG: _on_print_success called with temp_pdf_path: {temp_pdf_path}")
         # Store temp PDF path so main app can clean it up after ink analysis
         self.last_temp_pdf_path = temp_pdf_path
+        print(f"DEBUG: About to emit print_job_successful signal")
         self.print_job_successful.emit()
+        print(f"DEBUG: print_job_successful signal emitted")
     
     def cleanup_last_temp_pdf(self):
         """
