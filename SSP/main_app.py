@@ -265,6 +265,7 @@ class PrintingSystemApp(QMainWindow):
         If not currently on the thank you screen, navigates to it first.
         """
         print("✅ Print job successfully completed")
+        print(f"DEBUG: on_print_successful called, about to trigger ink analysis")
         
         # Trigger ink analysis for the printed job (if print job info available)
         self._trigger_ink_analysis()
@@ -289,6 +290,7 @@ class PrintingSystemApp(QMainWindow):
         
         After analysis completes, the temporary PDF is cleaned up.
         """
+        print(f"DEBUG: _trigger_ink_analysis called")
         if not hasattr(self, 'current_print_job') or not self.current_print_job:
             print("⚠️ No print job info available for ink analysis")
             return
@@ -323,6 +325,8 @@ class PrintingSystemApp(QMainWindow):
         Args:
             operation: InkAnalysisOperation object with result or error
         """
+        print(f"DEBUG: _on_ink_analysis_completed called with operation: {operation}")
+        
         if operation.error:
             print(f"⚠️ Ink analysis failed: {operation.error}")
         else:
@@ -330,9 +334,11 @@ class PrintingSystemApp(QMainWindow):
             if result.get('success', False) and result.get('database_updated', False):
                 print("✅ Ink levels updated in database")
         
+        print(f"DEBUG: About to call _update_paper_count_after_print()")
         # Update paper count after successful printing
         self._update_paper_count_after_print()
         
+        print(f"DEBUG: About to call _update_coin_inventory_after_print()")
         # Update coin inventory after successful printing (for received coins)
         self._update_coin_inventory_after_print()
         
