@@ -53,7 +53,7 @@ class PaymentScreenView(QWidget):
         main_layout.addWidget(self.summary_label)
 
         # Total label
-        self.total_label = QLabel("Total Amount Due: ₱0.00")
+        self.total_label = QLabel("Total Amount Due: P0.00")
         self.total_label.setAlignment(Qt.AlignCenter)
         self.total_label.setStyleSheet(
             "QLabel { color: #36454F; font-size: 32px; font-weight: bold; padding: 12px; margin: 10px 0; min-height: 60px; "
@@ -75,7 +75,7 @@ class PaymentScreenView(QWidget):
         main_layout.addWidget(self.payment_status_label)
 
         # Amount received label
-        self.amount_received_label = QLabel("Amount Received: ₱0.00")
+        self.amount_received_label = QLabel("Amount Received: P0.00")
         self.amount_received_label.setAlignment(Qt.AlignCenter)
         self.amount_received_label.setStyleSheet(
             "QLabel { color: #36454F; font-size: 24px; font-weight: bold; padding: 10px; background-color: transparent; border: none; margin: 5px 0; border-radius: 5px; }"
@@ -102,7 +102,7 @@ class PaymentScreenView(QWidget):
         button_layout.setSpacing(15)
 
         # Back button
-        self.back_btn = QPushButton("← Back to Options")
+        self.back_btn = QPushButton("<- Back to Options")
         self.back_btn.setMinimumHeight(45)
         self.back_btn.setStyleSheet(self.get_back_button_style())
         self.back_btn.clicked.connect(self.back_button_clicked.emit)
@@ -142,7 +142,7 @@ class PaymentScreenView(QWidget):
         sim_layout.setSpacing(10)
         
         for val in [1, 5, 10, 20, 50, 100]:
-            btn = QPushButton(f"₱{val}")
+            btn = QPushButton(f"P{val}")
             btn.setMinimumHeight(35)
             btn.setStyleSheet(self.get_simulation_button_style())
             if val <= 10:
@@ -155,7 +155,7 @@ class PaymentScreenView(QWidget):
     
     def update_payment_data(self, summary_data):
         """Updates the payment data display."""
-        self.total_label.setText(f"Total Amount Due: ₱{summary_data['total_cost']:.2f}")
+        self.total_label.setText(f"Total Amount Due: P{summary_data['total_cost']:.2f}")
         
         summary_lines = [
             f"<b>Print Job Summary:</b>",
@@ -172,7 +172,7 @@ class PaymentScreenView(QWidget):
     
     def update_amount_received(self, amount):
         """Updates the amount received display."""
-        self.amount_received_label.setText(f"Amount Received: ₱{amount:.2f}")
+        self.amount_received_label.setText(f"Amount Received: P{amount:.2f}")
     
     def update_change_display(self, change_amount, change_text):
         """Updates the change display."""

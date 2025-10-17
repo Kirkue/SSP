@@ -278,9 +278,9 @@ class PaymentModel(QObject):
             print(f"DEBUG: persistent_gpio value: {self.persistent_gpio}")
             print(f"DEBUG: Calling persistent_gpio.enable_payment()")
             self.persistent_gpio.enable_payment()
-            print("✅ Payment mode enabled via persistent GPIO")
+            print("SUCCESS: Payment mode enabled via persistent GPIO")
         else:
-            print("❌ No persistent GPIO available")
+            print("ERROR: No persistent GPIO available")
         
         status_text = "Payment mode enabled - Use simulation buttons" if not PAYMENT_GPIO_AVAILABLE else "Payment mode enabled - Insert coins or bills"
         self.payment_status_updated.emit(status_text)
@@ -291,9 +291,9 @@ class PaymentModel(QObject):
         self.payment_ready = False
         if hasattr(self, 'persistent_gpio'):
             self.persistent_gpio.disable_payment()
-            print("✅ Payment mode disabled via persistent GPIO")
+            print("SUCCESS: Payment mode disabled via persistent GPIO")
         else:
-            print("❌ No persistent GPIO available")
+            print("ERROR: No persistent GPIO available")
         
         status_text = "Payment mode disabled" + (" (Simulation)" if not PAYMENT_GPIO_AVAILABLE else "")
         self.payment_status_updated.emit(status_text)
@@ -308,7 +308,7 @@ class PaymentModel(QObject):
         self.cash_received[coin_value] = self.cash_received.get(coin_value, 0) + 1
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
-        self.payment_status_updated.emit(f"₱{coin_value} coin received")
+        self.payment_status_updated.emit(f"P{coin_value} coin received")
     
     def on_bill_inserted(self, bill_value):
         """Handles bill insertion."""
@@ -319,7 +319,7 @@ class PaymentModel(QObject):
         self.cash_received[bill_value] = self.cash_received.get(bill_value, 0) + 1
         self.amount_received_updated.emit(self.amount_received)
         self._update_payment_status()
-        self.payment_status_updated.emit(f"₱{bill_value} bill received")
+        self.payment_status_updated.emit(f"P{bill_value} bill received")
     
     def simulate_coin(self, value):
         """Simulates coin insertion for testing."""
@@ -341,7 +341,7 @@ class PaymentModel(QObject):
             
             if self.amount_received >= self.total_cost and self.total_cost > 0:
                 change = self.amount_received - self.total_cost
-                change_text = f"Payment Complete. Change: ₱{change:.2f}" if change > 0 else "Payment Complete"
+                change_text = f"Payment Complete. Change: P{change:.2f}" if change > 0 else "Payment Complete"
                 self.change_updated.emit(change, change_text)
                 self.payment_button_enabled.emit(True)  # Enable payment button when sufficient payment
                 
@@ -353,7 +353,7 @@ class PaymentModel(QObject):
                     self._auto_complete_payment()
             else:
                 remaining = self.total_cost - self.amount_received
-                change_text = f"Remaining: ₱{remaining:.2f}"
+                change_text = f"Remaining: P{remaining:.2f}"
                 self.change_updated.emit(0, change_text)
                 self.payment_button_enabled.emit(False)  # Disable payment button when insufficient payment
                 
@@ -375,8 +375,8 @@ class PaymentModel(QObject):
         amt = self.best_payment_suggestion.get('amount', self.total_cost)
         chg = self.best_payment_suggestion.get('change', 0)
         if chg == 0:
-            return f"Max payment we can receive: ₱{amt:.2f} (exact)"
-        return f"Max payment we can receive: ₱{amt:.2f} (available ₱{chg:.2f})"
+            return f"Max payment we can receive: P{amt:.2f} (exact)"
+        return f"Max payment we can receive: P{amt:.2f} (available P{chg:.2f})"
     
     def _auto_complete_payment(self):
         """Automatically complete payment when sufficient amount is received."""
@@ -491,8 +491,8 @@ class PaymentModel(QObject):
         
         # NEW FLOW: Handle change dispensing FIRST, then print
         if change_amount > 0:
-            print(f"DEBUG: Starting change dispensing for ₱{change_amount:.2f}")
-            self.payment_status_updated.emit(f"Please wait... Dispensing change: ₱{change_amount:.2f}")
+            print(f"DEBUG: Starting change dispensing for P{change_amount:.2f}")
+            self.payment_status_updated.emit(f"Please wait... Dispensing change: P{change_amount:.2f}")
             print("DEBUG: Payment screen will stay active during hopper dispensing")
             
             # Ensure change dispenser is available
@@ -547,7 +547,7 @@ class PaymentModel(QObject):
                 actual_change = result.get('actual_change', 0)
                 expected_change = result.get('expected_change', 0)
                 
-                print(f"DEBUG: Change dispensing completed - ₱1={coins_1}, ₱5={coins_5}, actual={actual_change}, expected={expected_change}")
+                print(f"DEBUG: Change dispensing completed - P1={coins_1}, P5={coins_5}, actual={actual_change}, expected={expected_change}")
                 self.payment_status_updated.emit(f"Change dispensed! Updating inventory...")
                 
                 # Store dispensed change data for later database update
@@ -798,7 +798,7 @@ class PaymentModel(QObject):
             
             # Calculate change to dispense
             change_amount = self.amount_received - self.total_cost
-            print(f"Change to dispense: ₱{change_amount:.2f}")
+            print(f"Change to dispense: P{change_amount:.2f}")
             
             # Stop any existing dispense thread to prevent conflicts
             if hasattr(self, 'dispense_thread') and self.dispense_thread and self.dispense_thread.isRunning():
@@ -815,7 +815,7 @@ class PaymentModel(QObject):
             
             # Start dispensing change in a separate thread
             if change_amount > 0:
-                print(f"Starting change dispensing for ₱{change_amount:.2f}")
+                print(f"Starting change dispensing for P{change_amount:.2f}")
                 self.dispense_thread = DispenseThread(
                     dispenser=self.change_dispenser,
                     amount=change_amount,
