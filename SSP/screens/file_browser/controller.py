@@ -107,16 +107,6 @@ class FileBrowserController(QWidget):
         """Shows error messages to the user."""
         QMessageBox.critical(self, "Error", error_message)
     
-    def on_enter(self):
-        """Called when the file browser screen is shown."""
-        print("File browser screen entered")
-        # Don't reload PDF files here - they are loaded by USB controller
-        # The files are already loaded via load_pdf_files() method
-    
-    def on_leave(self):
-        """Called when leaving the file browser screen."""
-        print("File browser screen leaving")
-        self.model.cleanup()
     
     # --- PDF Preview Control Methods ---
     
@@ -211,12 +201,18 @@ class FileBrowserController(QWidget):
     
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
+        print("File browser screen entered")
+        # Don't reload PDF files here - they are loaded by USB controller
+        # The files are already loaded via load_pdf_files() method
+        
         # Start timeout timer (1 minute)
         self.timeout_timer.start(60000)
         print("⏰ File browser screen timeout started (1 minute)")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
+        print("File browser screen leaving")
+        self.model.cleanup()
         # Stop timeout timer
         self.timeout_timer.stop()
     

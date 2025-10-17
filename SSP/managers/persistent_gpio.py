@@ -129,16 +129,22 @@ class PersistentGPIO(QObject):
     
     def _set_acceptor_state(self, enable):
         """Enable or disable the bill acceptor."""
+        print(f"DEBUG: _set_acceptor_state called with enable={enable}")
         if self.gpio_available and self.pi and self.pi.connected:
-            self.pi.write(self.INHIBIT_PIN, 0 if enable else 1)  # LOW = enabled, HIGH = disabled
+            pin_value = 0 if enable else 1
+            print(f"DEBUG: Writing to INHIBIT_PIN {self.INHIBIT_PIN} with value {pin_value}")
+            self.pi.write(self.INHIBIT_PIN, pin_value)  # LOW = enabled, HIGH = disabled
             print(f"Bill acceptor {'enabled' if enable else 'disabled'}")
         else:
             print(f"Bill acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
     
     def _set_coin_acceptor_state(self, enable):
         """Enable or disable the coin acceptor."""
+        print(f"DEBUG: _set_coin_acceptor_state called with enable={enable}")
         if self.gpio_available and self.pi and self.pi.connected:
-            self.pi.write(self.COIN_INHIBIT_PIN, 1 if enable else 0)  # HIGH = enabled, LOW = disabled
+            pin_value = 1 if enable else 0
+            print(f"DEBUG: Writing to COIN_INHIBIT_PIN {self.COIN_INHIBIT_PIN} with value {pin_value}")
+            self.pi.write(self.COIN_INHIBIT_PIN, pin_value)  # HIGH = enabled, LOW = disabled
             print(f"Coin acceptor {'enabled' if enable else 'disabled'}")
         else:
             print(f"Coin acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
@@ -153,8 +159,11 @@ class PersistentGPIO(QObject):
     
     def disable_payment(self):
         """Disable payment processing."""
+        print("DEBUG: disable_payment() called")
         self.enabled = False
+        print("DEBUG: About to disable bill acceptor")
         self._set_acceptor_state(False)  # Disable bill acceptor
+        print("DEBUG: About to disable coin acceptor")
         self._set_coin_acceptor_state(False)  # Disable coin acceptor
         self.payment_status.emit("Payment disabled")
         print("SUCCESS: Persistent GPIO payment disabled")

@@ -685,17 +685,23 @@ class PaymentModel(QObject):
     
     def on_leave(self):
         """Called when leaving the payment screen."""
+        print("=== PAYMENT MODEL ON_LEAVE START ===")
         print("Payment screen leaving")
         
         # Stop coin timeout timer
         if hasattr(self, 'coin_timeout_timer') and self.coin_timeout_timer is not None:
             self.coin_timeout_timer.stop()
             self.coin_timeout_timer = None
+            print("DEBUG: Coin timeout timer stopped")
         
         # Disable payment but keep persistent GPIO running for other screens
         if hasattr(self, 'persistent_gpio'):
+            print("DEBUG: About to call persistent_gpio.disable_payment()")
             self.persistent_gpio.disable_payment()
+            print("DEBUG: persistent_gpio.disable_payment() completed")
             print("Persistent GPIO payment disabled (but GPIO kept alive for other screens)")
+        else:
+            print("ERROR: No persistent_gpio available to disable payment")
         
         # Payment is already disabled by persistent GPIO
         print("Payment screen cleanup completed")

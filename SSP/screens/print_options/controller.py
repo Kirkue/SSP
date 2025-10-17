@@ -142,25 +142,7 @@ class PrintOptionsController(QWidget):
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, self._check_paper_availability)
     
-    def on_enter(self):
-        """Called by main_app when this screen becomes active."""
-        print("Print options screen entered")
-        # Ensure analysis thread is not running from previous visits
-        self.model.stop_analysis()
-        
-        # Clear any existing paper warnings first
-        self.view.clear_paper_warning()
-        
-        # Delay the supplies check slightly to ensure admin_screen is ready
-        from PyQt5.QtCore import QTimer
-        QTimer.singleShot(100, self.check_supplies)
-        # Check paper availability immediately when entering screen
-        QTimer.singleShot(200, self._check_paper_availability)
 
-    def on_leave(self):
-        """Called by main_app when leaving this screen."""
-        print("Print options screen leaving")
-        self.model.stop_analysis()
     
     def check_supplies(self):
         """Check current supplies status and update view."""
@@ -233,12 +215,27 @@ class PrintOptionsController(QWidget):
     
     def on_enter(self):
         """Called by main_app when this screen becomes active."""
+        print("Print options screen entered")
+        # Ensure analysis thread is not running from previous visits
+        self.model.stop_analysis()
+        
+        # Clear any existing paper warnings first
+        self.view.clear_paper_warning()
+        
+        # Delay the supplies check slightly to ensure admin_screen is ready
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, self.check_supplies)
+        # Check paper availability immediately when entering screen
+        QTimer.singleShot(200, self._check_paper_availability)
+        
         # Start timeout timer (1 minute)
         self.timeout_timer.start(60000)
         print("⏰ Print options screen timeout started (1 minute)")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
+        print("Print options screen leaving")
+        self.model.stop_analysis()
         # Stop timeout timer
         self.timeout_timer.stop()
     

@@ -97,7 +97,13 @@ class PaymentController(QWidget):
     
     def on_leave(self):
         """Called when leaving the payment screen."""
+        print("*** PAYMENT CONTROLLER ON_LEAVE METHOD CALLED ***")
+        # Stop timeout timer
+        self.timeout_timer.stop()
+        print("TIMEOUT: Payment screen timeout stopped")
+        # Disable payment pins
         self.model.on_leave()
+        print("*** PAYMENT CONTROLLER ON_LEAVE COMPLETED ***")
     
     def go_back(self):
         """Public method to go back to print options screen."""
