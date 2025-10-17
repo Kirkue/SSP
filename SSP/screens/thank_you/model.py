@@ -229,16 +229,17 @@ class ThankYouModel(QObject):
         self.admin_override_requested.emit()
     
     def handle_admin_override(self):
-        """Handle admin override - allows going back to idle screen."""
+        """Handle admin override - navigates to admin screen."""
         self.current_state = "admin_override"
         self.status_updated.emit(
             "ADMIN OVERRIDE",
-            "Returning to idle screen..."
+            "Navigating to admin screen..."
         )
         # Hide admin override button since override is being processed
         self.admin_override_hidden.emit()
-        # Short timer before redirecting
-        self.redirect_timer.start(2000)
+        # Navigate directly to admin screen
+        if hasattr(self, 'main_app') and self.main_app:
+            self.main_app.show_screen('admin')
     
     def _on_print_success(self):
         """Handle successful print completion."""

@@ -11,6 +11,7 @@ class ThankYouController(QWidget):
         self.main_app = main_app
         
         self.model = ThankYouModel()
+        self.model.main_app = main_app  # Pass main_app reference to model
         self.view = ThankYouScreenView()
         
         # Set the view's layout as this controller's layout
