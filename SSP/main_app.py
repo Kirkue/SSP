@@ -137,14 +137,8 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting, Qt.QueuedConnection)
         print("DEBUG: Printer manager signals connected successfully with QueuedConnection")
         
-        # Test signal connection
-        print("DEBUG: Testing signal connection...")
-        try:
-            # This should trigger the callback immediately
-            self.printer_manager.print_job_successful.emit()
-            print("DEBUG: Test signal emission successful")
-        except Exception as e:
-            print(f"DEBUG: Test signal emission failed: {e}")
+        # Signal connection established successfully
+        print("DEBUG: Signal connection established successfully")
 
         # Apply application-wide styles
         self.setStyleSheet("""
