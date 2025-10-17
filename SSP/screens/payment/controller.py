@@ -33,16 +33,12 @@ class PaymentController(QWidget):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller -> Model ---
         self.view.back_button_clicked.connect(self.model.go_back)
-        self.view.payment_mode_toggle_clicked.connect(self._toggle_payment_mode)
-        self.view.payment_button_clicked.connect(self._complete_payment)
         # popup removed
         self.view.simulation_coin_clicked.connect(self.model.simulate_coin)
         self.view.simulation_bill_clicked.connect(self.model.simulate_bill)
         
         # Reset timeout on user interaction
         self.view.back_button_clicked.connect(self._reset_timeout)
-        self.view.payment_mode_toggle_clicked.connect(self._reset_timeout)
-        self.view.payment_button_clicked.connect(self._reset_timeout)
         self.view.simulation_coin_clicked.connect(self._reset_timeout)
         self.view.simulation_bill_clicked.connect(self._reset_timeout)
         
@@ -70,18 +66,6 @@ class PaymentController(QWidget):
         print("Payment screen leaving - automatically disabling payment")
         self.model.disable_payment_mode()
     
-    def _toggle_payment_mode(self):
-        """Toggles between enable and disable payment mode (now just for manual override)."""
-        if self.model.payment_ready:
-            self.model.disable_payment_mode()
-        else:
-            self.model.enable_payment_mode()
-    
-    def _complete_payment(self):
-        """Handles payment completion."""
-        success, message = self.model.complete_payment(self.main_app)
-        if not success:
-            QMessageBox.warning(self, "Payment Error", message)
     
     def _handle_payment_completed(self, payment_info):
         """Handles payment completion signal from model."""
@@ -153,6 +137,10 @@ class PaymentController(QWidget):
         # Start timeout timer (1 minute)
         self.timeout_timer.start(60000)
         print("⏰ Payment screen timeout started (1 minute)")
+        
+        # Automatically enable payment when entering the screen
+        self.model.enable_payment_mode()
+        print("✅ Payment automatically enabled on screen entry")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""

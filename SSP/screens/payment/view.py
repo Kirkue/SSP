@@ -17,8 +17,6 @@ class PaymentScreenView(QWidget):
     
     # Signals for user interactions
     back_button_clicked = pyqtSignal()
-    payment_mode_toggle_clicked = pyqtSignal()  # Toggle between enable/disable
-    payment_button_clicked = pyqtSignal()
     # Inline suggestion now
     simulation_coin_clicked = pyqtSignal(int)  # coin_value
     simulation_bill_clicked = pyqtSignal(int)  # bill_value
@@ -109,23 +107,8 @@ class PaymentScreenView(QWidget):
         self.back_btn.setStyleSheet(self.get_back_button_style())
         self.back_btn.clicked.connect(self.back_button_clicked.emit)
 
-        # Enable/Disable payment button
-        self.enable_payment_btn = QPushButton("Enable Payment")
-        self.enable_payment_btn.setMinimumHeight(45)
-        self.enable_payment_btn.setStyleSheet(self.get_enable_payment_button_style())
-        self.enable_payment_btn.clicked.connect(self.payment_mode_toggle_clicked.emit)
-
-        # Payment button
-        self.payment_btn = QPushButton("Print")
-        self.payment_btn.setMinimumHeight(45)
-        self.payment_btn.setEnabled(False)
-        self.payment_btn.setStyleSheet(self.get_payment_button_style())
-        self.payment_btn.clicked.connect(self.payment_button_clicked.emit)
-
         button_layout.addWidget(self.back_btn)
         button_layout.addStretch()
-        button_layout.addWidget(self.enable_payment_btn)
-        button_layout.addWidget(self.payment_btn)
         main_layout.addLayout(button_layout)
 
         stacked_layout.addWidget(self.background_label)
@@ -220,48 +203,15 @@ class PaymentScreenView(QWidget):
         else:
             self.enable_payment_btn.setStyleSheet(self.get_enable_payment_button_style())
     
-    def set_buttons_enabled(self, back_enabled, enable_payment_enabled, payment_enabled):
+    def set_buttons_enabled(self, back_enabled):
         """Sets the enabled state of all buttons."""
         self.back_btn.setEnabled(back_enabled)
-        self.enable_payment_btn.setEnabled(enable_payment_enabled)
-        self.payment_btn.setEnabled(payment_enabled)
-    
-    def set_payment_mode_button_state(self, is_enabled):
-        """Sets the payment mode button state and text."""
-        if is_enabled:
-            self.enable_payment_btn.setText("Disable Payment")
-            self.enable_payment_btn.setStyleSheet(self.get_disable_payment_button_style())
-        else:
-            self.enable_payment_btn.setText("Enable Payment")
-            self.enable_payment_btn.setStyleSheet(self.get_enable_payment_button_style())
     
     def get_back_button_style(self):
         """Returns the style for the back button."""
         return (
             "QPushButton { background-color: #1e440a; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; padding: 12px 24px; } "
             "QPushButton:hover { background-color: #2a5f10; }"
-        )
-    
-    def get_enable_payment_button_style(self):
-        """Returns the style for the enable payment button."""
-        return (
-            "QPushButton { background-color: #1e440a; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; padding: 12px 24px; } "
-            "QPushButton:hover { background-color: #2a5f10; }"
-        )
-    
-    def get_disable_payment_button_style(self):
-        """Returns the style for the disable payment button."""
-        return (
-            "QPushButton { background-color: #ffc107; color: black; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; padding: 12px 24px; } "
-            "QPushButton:hover { background-color: #e0a800; }"
-        )
-    
-    def get_payment_button_style(self):
-        """Returns the style for the payment button."""
-        return (
-            "QPushButton { background-color: #1e440a; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; padding: 12px 24px; } "
-            "QPushButton:hover { background-color: #2a5f10; } "
-            "QPushButton:disabled { background-color: #6c757d; color: #dee2e6; }"
         )
     
     def get_simulation_button_style(self):
