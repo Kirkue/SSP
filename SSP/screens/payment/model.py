@@ -584,6 +584,7 @@ class PaymentModel(QObject):
     
     def _start_printing(self):
         """Start the printing process after change has been dispensed."""
+        print("DEBUG: _start_printing method called")
         print("DEBUG: Starting printing process...")
         self.payment_status_updated.emit("Change dispensed. Starting to print...")
         
@@ -908,7 +909,7 @@ class PaymentModel(QObject):
                 'copies': self.payment_data.get('copies', 1),
                 'color_mode': self.payment_data.get('color_mode', 'Color')
             }
-            self.main_app.print_job_details = print_job_details
+            self.main_app.current_print_job = print_job_details
             print(f"SUCCESS: Print job details stored: {print_job_details}")
             
             # Navigate to thank you screen
