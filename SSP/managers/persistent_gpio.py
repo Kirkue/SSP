@@ -47,6 +47,7 @@ class PersistentGPIO(QObject):
         self.COIN_PIN = 17
         self.BILL_PIN = 18
         self.INHIBIT_PIN = 23
+        self.COIN_INHIBIT_PIN = 22
         
         # Timing constants (matching original GPIOPaymentThread)
         self.DEBOUNCE_TIME = 0.1   # Minimum time between pulses
@@ -82,6 +83,10 @@ class PersistentGPIO(QObject):
             self.pi.set_pull_up_down(self.COIN_PIN, pigpio.PUD_UP)
             self.coin_callback = self.pi.callback(self.COIN_PIN, pigpio.FALLING_EDGE, self._coin_pulse_detected)
             
+            # Setup coin acceptor inhibit pin (pin 22)
+            self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
+            self._set_coin_acceptor_state(False)  # Start disabled
+            
             # Setup bill acceptor GPIO
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
@@ -90,7 +95,7 @@ class PersistentGPIO(QObject):
             self.bill_callback = self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self._bill_pulse_detected)
             
             self.running = True
-            self.payment_status.emit("Persistent GPIO ready - Bill acceptor disabled")
+            self.payment_status.emit("Persistent GPIO ready - Coin and bill acceptors disabled")
             print("SUCCESS: Persistent GPIO initialized successfully")
             
         except Exception as e:
@@ -130,17 +135,27 @@ class PersistentGPIO(QObject):
         else:
             print(f"Bill acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
     
+    def _set_coin_acceptor_state(self, enable):
+        """Enable or disable the coin acceptor."""
+        if self.gpio_available and self.pi and self.pi.connected:
+            self.pi.write(self.COIN_INHIBIT_PIN, 1 if enable else 0)  # HIGH = enabled, LOW = disabled
+            print(f"Coin acceptor {'enabled' if enable else 'disabled'}")
+        else:
+            print(f"Coin acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
+    
     def enable_payment(self):
         """Enable payment processing."""
         self.enabled = True
-        self._set_acceptor_state(True)
+        self._set_acceptor_state(True)  # Enable bill acceptor
+        self._set_coin_acceptor_state(True)  # Enable coin acceptor
         self.payment_status.emit("Payment enabled - Insert coins or bills")
         print("SUCCESS: Persistent GPIO payment enabled")
     
     def disable_payment(self):
         """Disable payment processing."""
         self.enabled = False
-        self._set_acceptor_state(False)
+        self._set_acceptor_state(False)  # Disable bill acceptor
+        self._set_coin_acceptor_state(False)  # Disable coin acceptor
         self.payment_status.emit("Payment disabled")
         print("SUCCESS: Persistent GPIO payment disabled")
     
