@@ -148,6 +148,8 @@ class PaymentController(QWidget):
     def _on_timeout(self):
         """Handle timeout - return to idle screen."""
         print("TIMEOUT: Payment screen timeout - returning to idle screen")
+        # Properly clean up payment screen before navigating away
+        self.on_leave()
         self.main_app.show_screen('idle')
     
     def _reset_timeout(self):
