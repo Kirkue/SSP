@@ -333,6 +333,9 @@ class PrintingSystemApp(QMainWindow):
         # Update paper count after successful printing
         self._update_paper_count_after_print()
         
+        # Update coin inventory after successful printing (for received coins)
+        self._update_coin_inventory_after_print()
+        
         # Always clean up temp PDF after analysis completes
         self.printer_manager.cleanup_last_temp_pdf()
 
@@ -354,57 +357,127 @@ class PrintingSystemApp(QMainWindow):
             total_pages = len(selected_pages) * copies
             
             print(f"📄 Updating paper count: -{total_pages} pages (pages: {len(selected_pages)}, copies: {copies})")
+            print(f"DEBUG: current_print_job details: {self.current_print_job}")
             
-            # Get current paper count from database (asynchronous)
-            operation = self.db_threader.get_paper_count(callback=self._on_paper_count_retrieved)
-            operation.pages_to_deduct = total_pages  # Store for later use
-            
+            # Use direct database access instead of async threader
+            if hasattr(self, 'admin_screen') and self.admin_screen:
+                # Get current paper count
+                current_count = self.admin_screen.get_paper_count()
+                if current_count is not None:
+                    new_count = max(0, current_count - total_pages)
+                    
+                    # Update paper count directly through admin screen
+                    print(f"DEBUG: Calling decrement_paper_count with {total_pages} pages")
+                    success = self.admin_screen.model.decrement_paper_count(total_pages)
+                    print(f"DEBUG: decrement_paper_count returned: {success}")
+                    
+                    if success:
+                        print(f"✅ Paper count updated: {current_count} -> {new_count}")
+                        
+                        # Verify the update by checking the database again
+                        updated_count = self.admin_screen.get_paper_count()
+                        print(f"DEBUG: Verified paper count in database: {updated_count}")
+                        
+                        # Check for low paper alert
+                        if new_count <= 10:
+                            print(f"⚠️ Low paper alert: {new_count} sheets remaining")
+                    else:
+                        print("❌ Failed to update paper count")
+                else:
+                    print("⚠️ Could not retrieve current paper count")
+            else:
+                print("⚠️ No admin screen available for paper count update")
+                
         except Exception as e:
             print(f"❌ Error updating paper count: {e}")
 
-    def _on_paper_count_retrieved(self, operation):
+    def _update_coin_inventory_after_print(self):
         """
-        Handle paper count retrieval and update with deduction.
+        Update coin inventory after successful printing.
         
-        Args:
-            operation: DatabaseOperation object with paper count result
+        This method handles BOTH:
+        1. Adding received coins (coins inserted during payment)
+        2. Subtracting dispensed change (coins given as change)
+        
+        This ensures the database reflects the actual coins in the system.
         """
+        if not hasattr(self, 'current_print_job') or not self.current_print_job:
+            print("⚠️ No print job info available for coin inventory update")
+            return
+        
         try:
-            if operation.error:
-                print(f"❌ Error retrieving paper count: {operation.error}")
-                return
+            print(f"DEBUG: Starting coin inventory update for print job: {self.current_print_job}")
             
-            current_count = operation.result
-            pages_to_deduct = getattr(operation, 'pages_to_deduct', 0)
-            
-            if current_count is not None:
-                new_count = max(0, current_count - pages_to_deduct)
+            # Get payment info from the payment model if available
+            if hasattr(self, 'payment_screen') and self.payment_screen:
+                payment_model = self.payment_screen.model
                 
-                # Update paper count in database
-                self.db_threader.update_paper_count(new_count, callback=self._on_paper_count_updated)
-                print(f"✅ Paper count updated: {current_count} -> {new_count}")
+                # Handle received coins (coins inserted during payment)
+                if hasattr(payment_model, 'cash_received') and payment_model.cash_received:
+                    print(f"💰 Adding received coins to inventory: {payment_model.cash_received}")
+                    self._update_coin_inventory_items(payment_model.cash_received, add=True)
                 
-                # Check for low paper alert
-                if new_count <= 10:
-                    print(f"⚠️ Low paper alert: {new_count} sheets remaining")
-                    # SMS alert will be handled by admin screen when it refreshes
+                # Handle dispensed change (coins given as change)
+                if hasattr(payment_model, 'change_dispensed') and payment_model.change_dispensed:
+                    print(f"💰 Subtracting dispensed change from inventory: {payment_model.change_dispensed}")
+                    self._update_coin_inventory_items(payment_model.change_dispensed, add=False)
+                else:
+                    print("DEBUG: No change dispensed data available")
+                    
             else:
-                print("⚠️ Could not retrieve current paper count")
+                print("⚠️ No payment screen available for coin inventory update")
                 
         except Exception as e:
-            print(f"❌ Error processing paper count: {e}")
+            print(f"❌ Error updating coin inventory: {e}")
 
-    def _on_paper_count_updated(self, operation):
+    def _update_coin_inventory_items(self, coin_data, add=True):
         """
-        Handle paper count update completion.
+        Update coin inventory with specific coin data.
         
         Args:
-            operation: DatabaseOperation object with update result
+            coin_data: Dictionary of {denomination: count} 
+            add: True to add coins, False to subtract coins
         """
-        if operation.error:
-            print(f"❌ Error updating paper count: {operation.error}")
-        else:
-            print(f"✅ Paper count successfully updated in database")
+        if not hasattr(self, 'admin_screen') or not self.admin_screen:
+            print("⚠️ No admin screen available for coin inventory update")
+            return
+            
+        try:
+            print(f"DEBUG: Admin screen available, updating coin inventory")
+            for denomination, count in coin_data.items():
+                if count > 0:
+                    is_bill = denomination >= 20
+                    operation = "Adding" if add else "Subtracting"
+                    print(f"DEBUG: {operation} {count} x {denomination} {'bill' if is_bill else 'coin'}")
+                    
+                    # Get current count
+                    current_inventory = self.admin_screen.model.db_manager.get_cash_inventory()
+                    current_count = 0
+                    
+                    for item in current_inventory:
+                        if (item.get('denomination') == denomination and 
+                            item.get('type') == ('bill' if is_bill else 'coin')):
+                            current_count = item.get('count', 0)
+                            break
+                    
+                    # Calculate new count
+                    if add:
+                        new_count = current_count + count
+                    else:
+                        new_count = max(0, current_count - count)  # Don't go below 0
+                    
+                    # Update database
+                    self.admin_screen.model.db_manager.update_cash_inventory(
+                        denomination=denomination,
+                        count=new_count,
+                        type='bill' if is_bill else 'coin'
+                    )
+                    
+                    operation_symbol = "+" if add else "-"
+                    print(f"✅ Updated {denomination} {'bill' if is_bill else 'coin'}: {current_count} {operation_symbol}{count} = {new_count}")
+                    
+        except Exception as e:
+            print(f"❌ Error updating coin inventory items: {e}")
 
     def on_print_waiting(self):
         """

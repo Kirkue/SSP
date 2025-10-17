@@ -37,6 +37,10 @@ class GPIOPaymentThread(QThread):
         
         # Print-related attributes
         self.print_file_path = None
+        
+        # Payment tracking attributes
+        self.cash_received = {}
+        self.change_dispensed = {}
         self.selected_pages = None
         self.copies = 1
         self.color_mode = "Color"
@@ -531,6 +535,10 @@ class PaymentModel(QObject):
                 
                 print(f"DEBUG: Change dispensing completed - ₱1={coins_1}, ₱5={coins_5}, actual={actual_change}, expected={expected_change}")
                 self.payment_status_updated.emit(f"Change dispensed! Updating inventory...")
+                
+                # Store dispensed change data for later database update
+                self.change_dispensed = {1: coins_1, 5: coins_5}
+                print(f"DEBUG: Stored dispensed change data: {self.change_dispensed}")
                 
                 # Update database with actual coins dispensed
                 if hasattr(self, 'main_app') and self.main_app and hasattr(self.main_app, 'db_threader') and self.main_app.db_threader:
