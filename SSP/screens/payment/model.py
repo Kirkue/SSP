@@ -46,21 +46,25 @@ class GPIOPaymentThread(QThread):
             self.pi = pigpio.pi()
             if not self.pi.connected:
                 raise Exception("Could not connect to pigpio daemon")
-            self.COIN_PIN, self.BILL_PIN, self.INHIBIT_PIN = 17, 18, 23
+            self.COIN_PIN, self.BILL_PIN, self.INHIBIT_PIN, self.COIN_INHIBIT_PIN = 17, 18, 23, 22
             
-            # Setup coin acceptor GPIO (exactly like working code)
+            # Setup coin acceptor GPIO
             self.pi.set_mode(self.COIN_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.COIN_PIN, pigpio.PUD_UP)
             self.pi.callback(self.COIN_PIN, pigpio.FALLING_EDGE, self.coin_pulse_detected)
             
-            # Setup bill acceptor GPIO (exactly like working code)
+            # Setup coin acceptor inhibit pin (pin 22)
+            self.pi.set_mode(self.COIN_INHIBIT_PIN, pigpio.OUTPUT)
+            self.set_coin_acceptor_state(False)  # Start disabled (pin 22 = 0)
+            
+            # Setup bill acceptor GPIO
             self.pi.set_mode(self.BILL_PIN, pigpio.INPUT)
             self.pi.set_pull_up_down(self.BILL_PIN, pigpio.PUD_UP)
             self.pi.set_mode(self.INHIBIT_PIN, pigpio.OUTPUT)
             self.set_acceptor_state(False)  # Start disabled
             self.pi.callback(self.BILL_PIN, pigpio.FALLING_EDGE, self.bill_pulse_detected)
             
-            self.payment_status.emit("Payment system ready - Bill acceptor disabled")
+            self.payment_status.emit("Payment system ready - Coin and bill acceptors disabled")
         except Exception as e:
             self.payment_status.emit(f"GPIO Error: {str(e)}")
             self.gpio_available = False
@@ -74,6 +78,13 @@ class GPIOPaymentThread(QThread):
             print(f"Bill acceptor {'enabled' if enable else 'disabled'}")
         else:
             self.payment_status.emit(f"Bill acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
+
+    def set_coin_acceptor_state(self, enable):
+        if self.gpio_available and self.pi:
+            self.pi.write(self.COIN_INHIBIT_PIN, 1 if enable else 0)  # HIGH = enabled, LOW = disabled
+            print(f"Coin acceptor {'enabled' if enable else 'disabled'}")
+        else:
+            self.payment_status.emit(f"Coin acceptor {'enabled' if enable else 'disabled'} (simulation mode)")
 
     def coin_pulse_detected(self, gpio, level, tick):
         current_time = time.time()
@@ -248,6 +259,10 @@ class PaymentModel(QObject):
         if hasattr(self, 'persistent_gpio'):
             self.persistent_gpio.enable_payment()
         
+        # Enable coin acceptor (pin 22 = HIGH to enable)
+        if hasattr(self, 'gpio_thread') and self.gpio_thread:
+            self.gpio_thread.set_coin_acceptor_state(True)
+        
         status_text = "Payment mode enabled - Use simulation buttons" if not PAYMENT_GPIO_AVAILABLE else "Payment mode enabled - Insert coins or bills"
         self.payment_status_updated.emit(status_text)
         self.payment_mode_changed.emit(True)
@@ -257,6 +272,10 @@ class PaymentModel(QObject):
         self.payment_ready = False
         if hasattr(self, 'persistent_gpio'):
             self.persistent_gpio.disable_payment()
+        
+        # Disable coin acceptor (pin 22 = LOW to disable)
+        if hasattr(self, 'gpio_thread') and self.gpio_thread:
+            self.gpio_thread.set_coin_acceptor_state(False)
         
         status_text = "Payment mode disabled" + (" (Simulation)" if not PAYMENT_GPIO_AVAILABLE else "")
         self.payment_status_updated.emit(status_text)
@@ -638,7 +657,7 @@ class PaymentModel(QObject):
         print("Payment screen leaving")
         
         # Stop coin timeout timer
-        if hasattr(self, 'coin_timeout_timer'):
+        if hasattr(self, 'coin_timeout_timer') and self.coin_timeout_timer is not None:
             self.coin_timeout_timer.stop()
             self.coin_timeout_timer = None
         
@@ -646,6 +665,11 @@ class PaymentModel(QObject):
         if hasattr(self, 'persistent_gpio'):
             self.persistent_gpio.disable_payment()
             print("Persistent GPIO payment disabled (but GPIO kept alive for other screens)")
+        
+        # Disable coin acceptor when leaving payment screen
+        if hasattr(self, 'gpio_thread') and self.gpio_thread:
+            self.gpio_thread.set_coin_acceptor_state(False)
+            print("Coin acceptor disabled")
         
         # Stop any running dispense thread
         if hasattr(self, 'dispense_thread') and self.dispense_thread:
@@ -676,29 +700,57 @@ class PaymentModel(QObject):
     
     def _log_partial_payment(self):
         """Log partial payment when user cancels transaction."""
-        if self.amount_received > 0 and self.payment_data:
+        try:
+            if not (self.amount_received and self.payment_data):
+                return
+
+            # Defensive guards for keys
+            pdf_data = self.payment_data.get('pdf_data') or {}
+            file_path = pdf_data.get('path') or "unknown.pdf"
+            selected_pages = self.payment_data.get('selected_pages') or []
+            copies = int(self.payment_data.get('copies') or 1)
+            color_mode = self.payment_data.get('color_mode') or 'Color'
+
             # Log cancelled transaction with partial payment
             transaction_data = {
-                'file_name': os.path.basename(self.payment_data['pdf_data']['path']),
-                'pages': len(self.payment_data['selected_pages']),
-                'copies': self.payment_data['copies'],
-                'color_mode': self.payment_data['color_mode'],
-                'total_cost': self.total_cost,
-                'amount_paid': self.amount_received,
+                'file_name': os.path.basename(file_path),
+                'pages': len(selected_pages),
+                'copies': copies,
+                'color_mode': color_mode,
+                'total_cost': float(self.total_cost or 0),
+                'amount_paid': float(self.amount_received or 0),
                 'change_given': 0,  # No change given since transaction cancelled
                 'status': 'cancelled_partial_payment'
             }
-            self.db_manager.log_transaction(transaction_data)
-            
-            # Update cash inventory with received money (even though transaction cancelled)
-            for denomination, count in self.cash_received.items():
-                self.db_manager.update_cash_inventory(
-                    denomination=denomination, 
-                    count=count, 
-                    type='bill' if denomination >= 20 else 'coin'
-                )
-            
+            try:
+                self.db_manager.log_transaction(transaction_data)
+            except Exception as log_err:
+                print(f"WARNING: Failed to log cancelled transaction: {log_err}")
+
+            # Safely increment cash inventory with received money (do not overwrite totals)
+            try:
+                current_inventory = {}
+                for item in (self.db_manager.get_cash_inventory() or []):
+                    if item.get('type') == 'coin' or item.get('type') == 'bill':
+                        current_inventory[(item.get('type'), int(item.get('denomination')))] = int(item.get('count') or 0)
+
+                for denomination, count in (self.cash_received or {}).items():
+                    if not count:
+                        continue
+                    is_bill = denomination >= 20
+                    key = ('bill' if is_bill else 'coin', int(denomination))
+                    new_count = current_inventory.get(key, 0) + int(count)
+                    self.db_manager.update_cash_inventory(
+                        denomination=int(denomination),
+                        count=new_count,
+                        type='bill' if is_bill else 'coin'
+                    )
+            except Exception as inv_err:
+                print(f"WARNING: Failed to update cash inventory on cancel: {inv_err}")
+
             print(f"Logged cancelled transaction: {self.amount_received} received, {self.total_cost} required")
+        except Exception as e:
+            print(f"WARNING: _log_partial_payment encountered an error but will not block navigation: {e}")
 
     def complete_payment(self, main_app):
         """Complete the payment process - dispense change and start printing."""
