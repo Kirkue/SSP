@@ -79,6 +79,15 @@ class AdminModel(QObject):
             self.show_message.emit("Invalid Input", "Please enter a valid number.")
             self.load_paper_count() # Revert display
 
+    def check_paper_availability(self, pages_to_print: int) -> bool:
+        """Checks if there's enough paper for a print job. Returns True if available."""
+        if self.paper_count >= pages_to_print:
+            print(f"Paper availability check: {self.paper_count} sheets available, {pages_to_print} required")
+            return True
+        else:
+            print(f"ERROR: Not enough paper. Required: {pages_to_print}, Available: {self.paper_count}")
+            return False
+
     def decrement_paper_count(self, pages_to_print: int) -> bool:
         """Decrements paper count for a print job. Returns True on success."""
         if self.paper_count >= pages_to_print:

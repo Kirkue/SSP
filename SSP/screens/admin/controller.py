@@ -99,6 +99,12 @@ class AdminController(QWidget):
         print(f"Admin get_paper_count: Returning {fresh_count} (model has {self.model.paper_count})")
         return fresh_count
 
+    def check_paper_availability(self, pages_to_print: int) -> bool:
+        """
+        Public method to check paper availability without decrementing.
+        """
+        return self.model.check_paper_availability(pages_to_print)
+
     def update_paper_count(self, pages_to_print: int) -> bool:
         """
         Public method for PaymentScreen to call. Delegates logic to the model.

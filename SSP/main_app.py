@@ -330,8 +330,81 @@ class PrintingSystemApp(QMainWindow):
             if result.get('success', False) and result.get('database_updated', False):
                 print("✅ Ink levels updated in database")
         
+        # Update paper count after successful printing
+        self._update_paper_count_after_print()
+        
         # Always clean up temp PDF after analysis completes
         self.printer_manager.cleanup_last_temp_pdf()
+
+    def _update_paper_count_after_print(self):
+        """
+        Update paper count in database after successful printing.
+        
+        This method is called after ink analysis completes, ensuring that
+        paper count is only decremented after the print job actually succeeds.
+        """
+        if not hasattr(self, 'current_print_job') or not self.current_print_job:
+            print("⚠️ No print job info available for paper count update")
+            return
+        
+        try:
+            # Calculate total pages printed
+            selected_pages = self.current_print_job.get('selected_pages', [])
+            copies = self.current_print_job.get('copies', 1)
+            total_pages = len(selected_pages) * copies
+            
+            print(f"📄 Updating paper count: -{total_pages} pages (pages: {len(selected_pages)}, copies: {copies})")
+            
+            # Get current paper count from database (asynchronous)
+            operation = self.db_threader.get_paper_count(callback=self._on_paper_count_retrieved)
+            operation.pages_to_deduct = total_pages  # Store for later use
+            
+        except Exception as e:
+            print(f"❌ Error updating paper count: {e}")
+
+    def _on_paper_count_retrieved(self, operation):
+        """
+        Handle paper count retrieval and update with deduction.
+        
+        Args:
+            operation: DatabaseOperation object with paper count result
+        """
+        try:
+            if operation.error:
+                print(f"❌ Error retrieving paper count: {operation.error}")
+                return
+            
+            current_count = operation.result
+            pages_to_deduct = getattr(operation, 'pages_to_deduct', 0)
+            
+            if current_count is not None:
+                new_count = max(0, current_count - pages_to_deduct)
+                
+                # Update paper count in database
+                self.db_threader.update_paper_count(new_count, callback=self._on_paper_count_updated)
+                print(f"✅ Paper count updated: {current_count} -> {new_count}")
+                
+                # Check for low paper alert
+                if new_count <= 10:
+                    print(f"⚠️ Low paper alert: {new_count} sheets remaining")
+                    # SMS alert will be handled by admin screen when it refreshes
+            else:
+                print("⚠️ Could not retrieve current paper count")
+                
+        except Exception as e:
+            print(f"❌ Error processing paper count: {e}")
+
+    def _on_paper_count_updated(self, operation):
+        """
+        Handle paper count update completion.
+        
+        Args:
+            operation: DatabaseOperation object with update result
+        """
+        if operation.error:
+            print(f"❌ Error updating paper count: {operation.error}")
+        else:
+            print(f"✅ Paper count successfully updated in database")
 
     def on_print_waiting(self):
         """

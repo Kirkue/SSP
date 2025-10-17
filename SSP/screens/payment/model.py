@@ -410,10 +410,10 @@ class PaymentModel(QObject):
         if not is_valid:
             return False, f"Payment cannot be processed: {message}"
         
-        # Check paper availability
+        # Check paper availability (without decrementing)
         total_pages = len(self.payment_data['selected_pages']) * self.payment_data['copies']
         admin_screen = main_app.admin_screen
-        if not admin_screen.update_paper_count(total_pages):
+        if not admin_screen.check_paper_availability(total_pages):
             return False, f"Not enough paper to complete print job.\nRequired: {total_pages} sheets. Please contact administrator to refill paper."
         
         # Process transaction
