@@ -80,7 +80,7 @@ class ThankYouModel(QObject):
         self.current_state = "waiting"
         self.status_updated.emit(
             "Thank you for printing with us",
-            "Your document is being processed."
+            "You may now remove your USB."
         )
         self.redirect_timer.stop()
         
@@ -155,12 +155,12 @@ class ThankYouModel(QObject):
         elif is_paper_jam:
             clean_message = "Paper jam detected. Please clear the paper jam."
         else:
-            clean_message = "An unknown printing error occurred."
+            clean_message = "An error occurred."
         
         self.error_type = "paper_jam" if is_paper_jam else "printing_error"
         
         self.status_updated.emit(
-            "PRINTING FAILED",
+            "ERROR OCCURRED",
             f"Error: {clean_message}\nPlease contact an administrator."
         )
         
