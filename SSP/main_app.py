@@ -129,6 +129,33 @@ class PrintingSystemApp(QMainWindow):
             
         self.stacked_widget.addWidget(self.thank_you_screen)
 
+        # Manually disable payment acceptors at startup
+        print("🔄 Disabling payment acceptors at startup...")
+        pi = None
+        try:
+            import pigpio
+            pi = pigpio.pi()
+            if pi.connected:
+                # Disable bill acceptor (pin 23) - HIGH = disabled
+                pi.write(23, 1)
+                print("✅ Bill acceptor disabled (pin 23)")
+                # Disable coin acceptor (pin 22) - LOW = disabled  
+                pi.write(22, 0)
+                print("✅ Coin acceptor disabled (pin 22)")
+                print("✅ Payment acceptors manually disabled at startup")
+            else:
+                print("⚠️ pigpio not connected - acceptors remain in default state")
+        except Exception as e:
+            print(f"⚠️ Could not disable acceptors manually: {e}")
+        finally:
+            # Ensure proper cleanup of GPIO connection
+            if pi is not None:
+                try:
+                    pi.stop()
+                    print("🔄 GPIO connection cleaned up")
+                except Exception as cleanup_error:
+                    print(f"⚠️ GPIO cleanup warning: {cleanup_error}")
+        
         # Show idle screen as initial screen
         self.show_screen('idle')
         
