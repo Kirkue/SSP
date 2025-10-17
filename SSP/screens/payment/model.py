@@ -244,6 +244,10 @@ class PaymentModel(QObject):
         """Setup persistent GPIO for payment processing."""
         # Use persistent GPIO service instead of creating new thread
         self.persistent_gpio = get_persistent_gpio()
+        print(f"DEBUG: Persistent GPIO obtained: {self.persistent_gpio}")
+        print(f"DEBUG: Persistent GPIO enabled: {getattr(self.persistent_gpio, 'enabled', 'N/A')}")
+        print(f"DEBUG: Persistent GPIO available: {getattr(self.persistent_gpio, 'gpio_available', 'N/A')}")
+        
         self.persistent_gpio.coin_inserted.connect(self.on_coin_inserted)
         self.persistent_gpio.bill_inserted.connect(self.on_bill_inserted)
         self.persistent_gpio.payment_status.connect(self.payment_status_updated.emit)
@@ -256,16 +260,20 @@ class PaymentModel(QObject):
     
     def enable_payment_mode(self):
         """Enables payment mode."""
+        print(f"DEBUG: enable_payment_mode called, total_cost: {self.total_cost}")
         if self.total_cost <= 0:
+            print("DEBUG: Total cost is 0 or negative, not enabling payment")
             return
         
         self.payment_ready = True
-        if hasattr(self, 'persistent_gpio'):
-            self.persistent_gpio.enable_payment()
+        print(f"DEBUG: payment_ready set to True")
         
-        # Enable coin acceptor (pin 22 = HIGH to enable)
-        if hasattr(self, 'gpio_thread') and self.gpio_thread:
-            self.gpio_thread.set_coin_acceptor_state(True)
+        if hasattr(self, 'persistent_gpio'):
+            print(f"DEBUG: Calling persistent_gpio.enable_payment()")
+            self.persistent_gpio.enable_payment()
+            print("✅ Payment mode enabled via persistent GPIO")
+        else:
+            print("❌ No persistent GPIO available")
         
         status_text = "Payment mode enabled - Use simulation buttons" if not PAYMENT_GPIO_AVAILABLE else "Payment mode enabled - Insert coins or bills"
         self.payment_status_updated.emit(status_text)
@@ -276,10 +284,9 @@ class PaymentModel(QObject):
         self.payment_ready = False
         if hasattr(self, 'persistent_gpio'):
             self.persistent_gpio.disable_payment()
-        
-        # Disable coin acceptor (pin 22 = LOW to disable)
-        if hasattr(self, 'gpio_thread') and self.gpio_thread:
-            self.gpio_thread.set_coin_acceptor_state(False)
+            print("✅ Payment mode disabled via persistent GPIO")
+        else:
+            print("❌ No persistent GPIO available")
         
         status_text = "Payment mode disabled" + (" (Simulation)" if not PAYMENT_GPIO_AVAILABLE else "")
         self.payment_status_updated.emit(status_text)
@@ -675,10 +682,8 @@ class PaymentModel(QObject):
             self.persistent_gpio.disable_payment()
             print("Persistent GPIO payment disabled (but GPIO kept alive for other screens)")
         
-        # Disable coin acceptor when leaving payment screen
-        if hasattr(self, 'gpio_thread') and self.gpio_thread:
-            self.gpio_thread.set_coin_acceptor_state(False)
-            print("Coin acceptor disabled")
+        # Payment is already disabled by persistent GPIO
+        print("Payment screen cleanup completed")
         
         # Stop any running dispense thread
         if hasattr(self, 'dispense_thread') and self.dispense_thread:
