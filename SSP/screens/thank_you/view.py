@@ -40,6 +40,11 @@ class ThankYouScreenView(QWidget):
         self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet("color: #36454F; font-size: 42px; font-weight: bold;")
 
+        self.status_label = QLabel("You may now remove your USB Drive")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setWordWrap(True)
+        self.status_label.setStyleSheet("color: #36454F; font-size: 35px; font-weight: bold;")
+
         self.subtitle_label = QLabel("Your document is being processed.")
         self.subtitle_label.setAlignment(Qt.AlignCenter)
         self.subtitle_label.setStyleSheet("color: #36454F; font-size: 24px;")
