@@ -24,11 +24,11 @@ RETRY_DELAY = 0.5        # Delay between retry attempts
 # Hopper B dispenses 5-peso coins
 HOPPER_CONFIGS = {
     'A': {
-        'signal_pin': 22,  # Coin pulse input for Hopper A  1 Peso
+        'signal_pin': 10,  # Coin pulse input for Hopper A  1 Peso
         'enable_pin': 24   # Hopper enable control for Hopper A
     },
     'B': {
-        'signal_pin': 27,   # Coin pulse input for Hopper B
+        'signal_pin': 11,   # Coin pulse input for Hopper B
         'enable_pin': 25   # Hopper enable control for Hopper B
     }
 }
@@ -138,8 +138,6 @@ class HopperController:
                 if elapsed > 0.01:  # Debounce: Minimum time for valid coin passage (10ms)
                     self.coin_passage_count += 1
                     print(f"[{self.name}] SENSOR: Coin passage complete (took {elapsed:.3f}s). Total passages in this cycle: {self.coin_passage_count}")
-                else:
-                    print(f"[{self.name}] SENSOR: False trigger (pulse too short: {elapsed:.3f}s)")
 
     def _wait_for_coin_passage(self):
         """Wait for exactly one coin passage through the sensor."""
