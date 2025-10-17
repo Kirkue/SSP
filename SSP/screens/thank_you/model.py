@@ -76,6 +76,11 @@ class ThankYouModel(QObject):
             print(f"DEBUG: Print job already started, skipping")
             return
         
+        # Check if there's a valid print job to start
+        if not hasattr(main_app, 'current_print_job') or not main_app.current_print_job:
+            print(f"DEBUG: No valid print job available, skipping print start")
+            return
+        
         # Set initial state
         self.current_state = "waiting"
         self.status_updated.emit(
