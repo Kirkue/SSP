@@ -51,20 +51,6 @@ class PaymentController(QWidget):
         self.model.payment_completed.connect(self._handle_payment_completed)
         self.model.go_back_requested.connect(self._go_back)
     
-    def on_enter(self):
-        """Called when entering the payment screen - automatically enable payment."""
-        print("Payment screen entered - automatically enabling payment")
-        # Reset payment state for new transactions
-        self.model.reset_payment_state()
-        # Enable payment mode
-        self.model.enable_payment_mode()
-    
-    def on_leave(self):
-        """Called when leaving the payment screen - automatically disable payment."""
-        print("Payment screen leaving - automatically disabling payment")
-        self.model.disable_payment_mode()
-    
-    
     def _handle_payment_completed(self, payment_info):
         """Handles payment completion signal from model."""
         if 'navigate_to' in payment_info:
@@ -94,6 +80,11 @@ class PaymentController(QWidget):
         print(f"DEBUG: Controller type: {type(self)}")
         print(f"DEBUG: Model type: {type(self.model)}")
         print(f"DEBUG: View type: {type(self.view)}")
+        
+        # Start timeout timer (1 minute)
+        self.timeout_timer.start(60000)
+        print("TIMEOUT: Payment screen timeout started (1 minute)")
+        
         print("DEBUG: About to call model.on_enter()")
         try:
             self.model.on_enter()
@@ -142,16 +133,6 @@ class PaymentController(QWidget):
 
     # When model recomputes the best suggestion, reflect it in the view via existing status signal
     # PaymentModel already emits payment_status_updated; hook that to update label too
-    
-    def on_enter(self):
-        """Called by main_app when this screen becomes active."""
-        # Start timeout timer (1 minute)
-        self.timeout_timer.start(60000)
-        print("TIMEOUT: Payment screen timeout started (1 minute)")
-        
-        # Automatically enable payment when entering the screen
-        self.model.enable_payment_mode()
-        print("SUCCESS: Payment automatically enabled on screen entry")
     
     def on_leave(self):
         """Called by main_app when leaving this screen."""
