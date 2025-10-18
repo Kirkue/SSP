@@ -455,7 +455,9 @@ class PaymentModel(QObject):
         
         # Process transaction
         change_amount = self.amount_received - self.total_cost
-        transaction_data = {
+        
+        # Store transaction data for logging after successful printing
+        self.transaction_data = {
             'file_name': os.path.basename(self.payment_data['pdf_data']['path']),
             'pages': len(self.payment_data['selected_pages']),
             'copies': self.payment_data['copies'],
@@ -465,15 +467,30 @@ class PaymentModel(QObject):
             'change_given': change_amount,
             'status': 'completed'
         }
-        self.db_manager.log_transaction(transaction_data)
         
-        # Update cash inventory
+        # Update cash inventory - add received coins to existing inventory
         for denomination, count in self.cash_received.items():
-            self.db_manager.update_cash_inventory(
-                denomination=denomination, 
-                count=count, 
-                type='bill' if denomination >= 20 else 'coin'
-            )
+            if count > 0:
+                # Get current inventory count
+                current_inventory = self.db_manager.get_cash_inventory()
+                current_count = 0
+                
+                for item in current_inventory:
+                    if (item.get('denomination') == denomination and 
+                        item.get('type') == ('bill' if denomination >= 20 else 'coin')):
+                        current_count = item.get('count', 0)
+                        break
+                
+                # Add received coins to current count
+                new_count = current_count + count
+                
+                self.db_manager.update_cash_inventory(
+                    denomination=denomination, 
+                    count=new_count, 
+                    type='bill' if denomination >= 20 else 'coin'
+                )
+                
+                print(f"💰 Added {count} x {denomination} to inventory: {current_count} + {count} = {new_count}")
         
         # Store payment info for later emission (after hopper dispensing and printing)
         self.payment_info = {
@@ -531,6 +548,17 @@ class PaymentModel(QObject):
             self._start_printing()
         
         return True, "Payment completed successfully"
+    
+    def log_transaction_after_print_success(self):
+        """Log the transaction to database after successful printing."""
+        if hasattr(self, 'transaction_data') and self.transaction_data:
+            try:
+                self.db_manager.log_transaction(self.transaction_data)
+                print(f"✅ Transaction logged successfully: {self.transaction_data['file_name']}")
+            except Exception as e:
+                print(f"❌ Error logging transaction: {e}")
+        else:
+            print("⚠️ No transaction data available to log")
     
     # Print job signals are now handled by the thank you screen
     # No need to connect them here since the thank you screen will manage the entire print lifecycle

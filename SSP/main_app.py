@@ -320,6 +320,11 @@ class PrintingSystemApp(QMainWindow):
         print("✅ Print job successfully completed")
         print(f"DEBUG: on_print_successful called, about to trigger ink analysis")
         
+        # Log transaction to database after successful printing
+        if hasattr(self, 'payment_screen') and self.payment_screen and hasattr(self.payment_screen.model, 'log_transaction_after_print_success'):
+            print("DEBUG: Logging transaction after successful print")
+            self.payment_screen.model.log_transaction_after_print_success()
+        
         # Update database immediately after print success (don't wait for ink analysis)
         print(f"DEBUG: Updating database immediately after print success")
         self._update_paper_count_after_print()
