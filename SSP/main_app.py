@@ -49,6 +49,7 @@ from managers.qr_reader import (CONNECTED, DuplicateReadFilter, QrReaderManager,
                                 describe_reader_status, should_log_status_change)
 from managers.kiosk_status import SETTING_LAST_SEEN, SETTING_QR_STATUS, heartbeat_timestamp
 from managers.session_manager import SessionManager
+from managers.session_vouchers import SessionVouchers
 from database.db_manager import DatabaseManager
 from managers.sms_manager import cleanup_sms
 from managers.print_refund import record_print_success, refund_failed_print
@@ -101,7 +102,6 @@ class PrintingSystemApp(QMainWindow):
         'scan_destination': 12,
         'scan_result': 13,
         'voucher': 14,
-        'voucher_balance': 15,
     }
 
     def __init__(self):
@@ -214,7 +214,6 @@ class PrintingSystemApp(QMainWindow):
         self.scan_destination_screen = ScanDestinationController(self)
         self.scan_result_screen = ScanResultController(self)
         self.voucher_screen = VoucherController(self)
-        self.voucher_balance_screen = VoucherBalanceController(self)
 
         # Connect payment completion to the print workflow once screens exist.
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
@@ -241,7 +240,11 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.addWidget(self.scan_destination_screen)
         self.stacked_widget.addWidget(self.scan_result_screen)
         self.stacked_widget.addWidget(self.voucher_screen)
-        self.stacked_widget.addWidget(self.voucher_balance_screen)
+
+        # "Check voucher balance" is a popup over whichever screen opened it, not a screen
+        # (screens/voucher_balance); the Vouchers it checks are remembered for the session.
+        self.session_vouchers = SessionVouchers()
+        self.voucher_balance = VoucherBalanceController(self, parent_widget=self)
 
         # Manually disable payment acceptors at startup
         print("🔄 Disabling payment acceptors at startup...")
@@ -369,6 +372,17 @@ class PrintingSystemApp(QMainWindow):
         index = self.stacked_widget.currentIndex()
         return next((name for name, i in self.SCREEN_MAP.items() if i == index), None)
 
+    def _qr_context(self):
+        """Where a QR read lands: the balance popup while it's open (a Voucher read then
+        checks the balance, whatever screen is underneath), otherwise the screen showing."""
+        if self.voucher_balance.is_open:
+            return 'voucher_balance'
+        return self._current_screen_name()
+
+    def open_voucher_balance(self):
+        """The "Check voucher balance" popup, over the current screen."""
+        self.voucher_balance.open()
+
     def _on_qr_read(self, text):
         """One read from the reader (or the SIM injector): de-duplicate, classify, decide, act."""
         self.note_activity()   # someone is at the kiosk, even if the read is rejected
@@ -376,7 +390,7 @@ class PrintingSystemApp(QMainWindow):
             print("QR read ignored: identical read just now")
             return
         read = classify_payload(text)
-        screen = self._current_screen_name()
+        screen = self._qr_context()
         outcome = decide_qr_read(read, screen, self.qr_session_manager)
         print(f"QR read ({read.kind}) on '{screen}' -> {outcome.action}: {outcome.message}")
         if outcome.action == "open_files":
@@ -388,7 +402,7 @@ class PrintingSystemApp(QMainWindow):
         elif outcome.action == "apply_voucher":
             self.payment_screen.apply_voucher_code(text)
         elif outcome.action == "check_voucher":
-            self.voucher_balance_screen.check_voucher_code(text)
+            self.voucher_balance.check_voucher_code(text)
 
     def open_session_files(self, source, files):
         """Load a redeemed wifi/email Session's files into file_browser — the one
@@ -544,6 +558,11 @@ class PrintingSystemApp(QMainWindow):
             print(f"❌ ERROR: Unknown screen name: {screen_name}")
             return
 
+        # The balance popup belongs to the screen it was opened on
+        popup = getattr(self, 'voucher_balance', None)
+        if popup is not None:
+            popup.close()
+
         # Call on_leave lifecycle method for current screen
         current_widget = self.stacked_widget.currentWidget()
         if current_widget is not None and hasattr(current_widget, 'on_leave'):
@@ -573,6 +592,8 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.setCurrentIndex(target_index)
         self.tap_guard.arm()
 
+        if screen_name == 'idle':
+            self.session_vouchers.clear()   # the next customer starts with none checked
         self._enter_timeout(screen_name)
 
         # Call on_enter lifecycle method for new screen
@@ -901,7 +922,8 @@ class PrintingSystemApp(QMainWindow):
 
     def end_session(self):
         """Clear what a customer who walked away left behind: the copies of their USB, Wi-Fi
-        and email files, so the next customer can't find them."""
+        and email files, and the Vouchers they checked, so the next customer can't find them."""
+        self.session_vouchers.clear()
         try:
             from managers.usb_file_manager import USBFileManager
             USBFileManager().cleanup_all_temp_folders()

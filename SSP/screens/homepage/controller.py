@@ -52,8 +52,8 @@ class HomepageController(QWidget):
             print(f"Landing screen: Unknown method selected: {method_key}")
 
     def _check_voucher_balance(self):
-        """Balance check doesn't start a print job; it returns here when done."""
-        self.main_app.show_screen('voucher_balance')
+        """A popup over this screen: it doesn't start a print job or leave the homepage."""
+        self.main_app.open_voucher_balance()
 
     def _go_to_admin(self):
         """Opens the PIN dialog (same as the idle screen) and goes to admin if correct."""

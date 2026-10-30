@@ -15,6 +15,7 @@ from PyQt5.QtTest import QTest  # noqa: E402
 from PyQt5.QtWidgets import QApplication, QLabel, QPushButton, QWidget  # noqa: E402
 
 from main_app import PrintingSystemApp  # noqa: E402
+from managers.session_vouchers import SessionVouchers  # noqa: E402
 from managers.timeout_manager import TimeoutManager, TimeoutPolicy  # noqa: E402
 from screens.email import EmailController  # noqa: E402
 from screens.file_browser import FileBrowserController  # noqa: E402
@@ -26,7 +27,6 @@ from screens.scan_result import ScanResultController  # noqa: E402
 from screens.scanner import ScannerController  # noqa: E402
 from screens.usb import USBController  # noqa: E402
 from screens.voucher import VoucherController  # noqa: E402
-from screens.voucher_balance import VoucherBalanceController  # noqa: E402
 from screens.wifi import WifiController  # noqa: E402
 from ui.activity_filter import ActivityFilter  # noqa: E402
 from ui.timeout_warning import TimeoutWarning  # noqa: E402
@@ -43,10 +43,14 @@ class TestWhichScreensTimeOut:
     @pytest.mark.parametrize("controller", [
         HomepageController, USBController, WifiController, EmailController, ScannerController,
         FileBrowserController, PrintOptionsController, PaymentController, ScanDestinationController,
-        ScanResultController, VoucherController, VoucherBalanceController,
+        ScanResultController, VoucherController,
     ])
     def test_customer_screens_declare_a_policy(self, controller):
         assert callable(getattr(controller, 'timeout_policy', None))
+
+    def test_the_balance_popup_is_not_a_screen(self):
+        from main_app import PrintingSystemApp as App
+        assert 'voucher_balance' not in App.SCREEN_MAP
 
     @pytest.mark.parametrize("name", ["idle", "thank_you", "admin", "data_viewer"])
     def test_these_screens_have_no_timeout(self, name):
@@ -81,11 +85,6 @@ class TestDestinations:
         s = stand_in(model=MagicMock())
         ScannerController._on_timeout(s)
         s.model.cancel.assert_called_once()
-        s.main_app.show_screen.assert_called_once_with('idle')
-
-    def test_voucher_balance_goes_to_idle(self):
-        s = stand_in()
-        VoucherBalanceController._on_timeout(s)
         s.main_app.show_screen.assert_called_once_with('idle')
 
     @pytest.mark.parametrize("controller", [FileBrowserController, PrintOptionsController])
@@ -173,6 +172,7 @@ def app_stand_in(current_name="homepage", widget=None):
     return SimpleNamespace(
         timeouts=MagicMock(), global_timer_label=label, _place_timer_label=lambda: None,
         _current_screen_name=lambda: current_name,
+        session_vouchers=SessionVouchers(),
         stacked_widget=SimpleNamespace(currentWidget=lambda: widget),
     )
 
@@ -229,6 +229,14 @@ class TestMainAppWiring:
         a = app_stand_in()
         PrintingSystemApp.note_activity(a)
         a.timeouts.note_activity.assert_called_once()
+
+    def test_end_session_forgets_the_vouchers_the_customer_checked(self, monkeypatch):
+        import managers.usb_file_manager as ufm
+        monkeypatch.setattr(ufm, 'USBFileManager', lambda: MagicMock())
+        a = app_stand_in()
+        a.session_vouchers.add("ABCD1234", 7)
+        PrintingSystemApp.end_session(a)
+        assert len(a.session_vouchers) == 0
 
     def test_end_session_clears_temp_files_and_never_raises(self, monkeypatch):
         import managers.usb_file_manager as ufm

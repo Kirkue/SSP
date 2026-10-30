@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QElapsedTimer, Qt, pyqtSignal
 
 from ui.theme import COLORS, RADIUS, FONT
-from ui.widgets import Header, BackButton, PrimaryButton, StatusBanner, nav_row
+from ui.widgets import Header, BackButton, PrimaryButton, SecondaryButton, StatusBanner, nav_row
 
 # Big enough to hit reliably on the touchscreen panel
 STEPPER_SIZE = 64
@@ -41,6 +41,7 @@ QPushButton:checked {{
 class PrintOptionsScreenView(QWidget):
     """The user interface for the Print Options Screen. Contains no logic."""
     back_button_clicked = pyqtSignal()
+    voucher_balance_clicked = pyqtSignal()
     continue_button_clicked = pyqtSignal()
     bw_mode_clicked = pyqtSignal()
     color_mode_clicked = pyqtSignal()
@@ -156,7 +157,10 @@ class PrintOptionsScreenView(QWidget):
         # ---- Buttons ----
         self.continue_btn = PrimaryButton("Continue to Payment →")
         self.continue_btn.clicked.connect(self.continue_button_clicked.emit)
-        layout.addLayout(nav_row(self.back_btn, self.continue_btn))
+        # A popup over this screen, so checking a voucher never costs the customer their place
+        self.voucher_balance_btn = SecondaryButton("Check voucher balance")
+        self.voucher_balance_btn.clicked.connect(self.voucher_balance_clicked.emit)
+        layout.addLayout(nav_row(self.back_btn, self.voucher_balance_btn, self.continue_btn))
 
         # Don't set layout here - let the controller handle it
         self.main_layout = main_layout

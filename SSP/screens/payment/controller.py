@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import pyqtSignal
 from .model import PaymentModel
+from managers.session_vouchers import SessionVouchers
 from managers.timeout_manager import TimeoutPolicy
 from managers.voucher_manager import CODE_ALPHABET
 from .view import PaymentScreenView
@@ -35,6 +36,7 @@ class PaymentController(QWidget):
         self.view.simulation_coin_clicked.connect(self.model.simulate_coin)
         self.view.simulation_bill_clicked.connect(self.model.simulate_bill)
         self.view.voucher_code_entered.connect(self.apply_voucher_code)
+        self.view.checked_voucher_clicked.connect(self.apply_voucher_code)
 
         # A coin or bill is activity too, though it isn't a tap (a bill takes seconds to validate)
         self.model.amount_received_updated.connect(lambda _amount: self.main_app.note_activity())
@@ -46,6 +48,7 @@ class PaymentController(QWidget):
         self.model.change_updated.connect(self.view.update_change_display)
         self.model.suggestion_updated.connect(self.view.update_inline_suggestion)
         self.model.vouchers_updated.connect(self.view.update_vouchers)
+        self.model.vouchers_updated.connect(lambda _applied: self._refresh_checked_vouchers())
         self.model.voucher_message.connect(self.view.show_voucher_message)
         self.model.payment_completed.connect(self._handle_payment_completed)
         self.model.go_back_requested.connect(self._go_back)
@@ -55,6 +58,15 @@ class PaymentController(QWidget):
         """Apply a Voucher from the "Use a voucher" entry or a QR read. Takes a
         typed code or a 'V1:<code>' payload, so a QR read can be passed straight in."""
         return self.model.apply_voucher(raw_code)
+
+    def _refresh_checked_vouchers(self):
+        """List the Vouchers checked earlier this session that aren't applied yet."""
+        remembered = getattr(self.main_app, 'session_vouchers', None)
+        if not isinstance(remembered, SessionVouchers):
+            self.view.set_checked_vouchers([])
+            return
+        applied = {v.code for v in self.model.applied_vouchers}
+        self.view.set_checked_vouchers([v for v in remembered.items() if v.code not in applied])
 
     def _handle_payment_completed(self, payment_info):
         """Handles payment completion signal from model."""
@@ -89,6 +101,7 @@ class PaymentController(QWidget):
         print(f"DEBUG: View type: {type(self.view)}")
 
         self.view.reset_voucher_entry()
+        self._refresh_checked_vouchers()
         print("DEBUG: About to call model.on_enter()")
         try:
             self.model.on_enter()

@@ -28,6 +28,7 @@ class PaymentScreenView(QWidget):
     simulation_bill_clicked = pyqtSignal(int)  # bill_value
     voucher_code_entered = pyqtSignal(str)     # raw text from the "Use a voucher" entry
     voucher_entry_activity = pyqtSignal()      # typing in the entry (keeps the screen awake)
+    checked_voucher_clicked = pyqtSignal(str)  # canonical code of a voucher checked earlier this session
 
     def __init__(self, voucher_keys, parent=None):
         super().__init__(parent)
@@ -176,6 +177,24 @@ class PaymentScreenView(QWidget):
             f"color: {COLORS['text']}; font-size: {FONT['size_md']}px; padding: 4px;"
         )
         layout.addWidget(self.vouchers_label)
+
+        # Vouchers checked in the balance popup this session, each with its balance and a
+        # button to apply it. Never applied automatically; hidden when there are none.
+        self.checked_vouchers_box = QWidget()
+        checked_layout = QVBoxLayout(self.checked_vouchers_box)
+        checked_layout.setContentsMargins(0, 0, 0, 0)
+        checked_layout.setSpacing(6)
+        caption = QLabel("Vouchers you checked:")
+        caption.setAlignment(Qt.AlignCenter)
+        caption.setStyleSheet(
+            f"color: {COLORS['text_secondary']}; font-size: {FONT['size_md']}px; font-weight: 600;")
+        checked_layout.addWidget(caption)
+        self.checked_vouchers_row = QHBoxLayout()
+        self.checked_vouchers_row.setSpacing(8)
+        checked_layout.addLayout(self.checked_vouchers_row)
+        self.checked_vouchers_box.hide()
+        layout.addWidget(self.checked_vouchers_box)
+
         self._set_voucher_input_visible(False)
 
     def _set_voucher_input_visible(self, visible):
@@ -201,6 +220,21 @@ class PaymentScreenView(QWidget):
         """vouchers: [AppliedVoucher] in the order Applied."""
         lines = [f"{v.label}: P{v.amount} applied, P{v.remaining} left" for v in vouchers]
         self.vouchers_label.setText("<br>".join(lines))
+
+    def set_checked_vouchers(self, vouchers):
+        """vouchers: [CheckedVoucher] not yet applied. One tap-to-apply button each."""
+        while self.checked_vouchers_row.count():
+            item = self.checked_vouchers_row.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        self.checked_vouchers = {}
+        for voucher in vouchers:
+            button = SecondaryButton(f"Apply {voucher.label}: P{voucher.remaining}")
+            button.setMinimumHeight(44)
+            button.clicked.connect(lambda _, code=voucher.code: self.checked_voucher_clicked.emit(code))
+            self.checked_vouchers_row.addWidget(button)
+            self.checked_vouchers[voucher.code] = button
+        self.checked_vouchers_box.setVisible(bool(vouchers))
 
     def reset_voucher_entry(self):
         self.voucher_input.clear()

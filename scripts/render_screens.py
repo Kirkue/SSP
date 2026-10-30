@@ -31,10 +31,13 @@ SCREENS = {
     "print_options": "PrintOptionsController",
     "payment": "PaymentController",
     "voucher": "VoucherController",
-    "voucher_balance": "VoucherBalanceController",
     "thank_you": "ThankYouController",
     "admin": "AdminController",
 }
+
+
+# Not screens: a popup over a screen, rendered on top of the homepage it opens from.
+POPUPS = ("voucher_balance_popup",)
 
 
 def prepare_environment():
@@ -87,10 +90,51 @@ def sample_page_image():
     return path
 
 
+def build_popup_preview(name):
+    """The balance popup open over the homepage, showing a found Voucher: its tallest state
+    (keypad, result and the saved note), so a popup too tall for the panel is caught."""
+    import importlib
+    from datetime import datetime
+    from unittest.mock import MagicMock
+
+    from PyQt5.QtCore import QSize
+    from PyQt5.QtWidgets import QVBoxLayout, QWidget
+
+    class Host(QWidget):
+        def __init__(self):
+            super().__init__()
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            self.background = importlib.import_module("screens.homepage").HomepageController(MagicMock())
+            layout.addWidget(self.background)
+            self.popup = importlib.import_module("screens.voucher_balance").VoucherBalanceController(
+                MagicMock(), parent_widget=self)
+
+        def resizeEvent(self, event):
+            super().resizeEvent(event)
+            if self.popup.is_open:
+                self.popup.view.setGeometry(self.rect())
+
+        def minimumSizeHint(self):
+            card = self.popup.view.card.sizeHint()
+            return QSize(card.width(), max(self.background.minimumSizeHint().height(), card.height() + 80))
+
+    host = Host()
+    popup = host.popup
+    popup.open()
+    model = popup.model
+    model.state, model.remaining, model.expires_at = model.FOUND, 50, datetime(2027, 1, 31)
+    popup.view.render(model, "Saved for this session: you can use it when you pay.")
+    return host
+
+
 def build_screen(name):
     """The real controller for `name`, wired to a stand-in main app."""
     import importlib
     from unittest.mock import MagicMock
+
+    if name in POPUPS:
+        return build_popup_preview(name)
 
     module = importlib.import_module(f"screens.{name}")
     screen = getattr(module, SCREENS[name])(MagicMock())
@@ -100,12 +144,13 @@ def build_screen(name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("screens", nargs="*", metavar="screen", help=f"default: all of {', '.join(SCREENS)}")
+    parser.add_argument("screens", nargs="*", metavar="screen",
+                        help=f"default: all of {', '.join(list(SCREENS) + list(POPUPS))}")
     parser.add_argument("--out", default="screenshots")
     parser.add_argument("--width", type=int, default=1920)
     parser.add_argument("--height", type=int, default=1080)
     args = parser.parse_args()
-    unknown = set(args.screens) - set(SCREENS)
+    unknown = set(args.screens) - set(SCREENS) - set(POPUPS)
     if unknown:
         parser.error(f"unknown screen(s): {', '.join(sorted(unknown))}")
 
@@ -124,7 +169,7 @@ def main():
     width, height = round(args.width / scale), round(args.height / scale)
     print(f"Rendering at {args.width}x{args.height} (scale {scale}, {width}x{height} logical) into {args.out}/")
     overflowed = []
-    for name in args.screens or SCREENS:
+    for name in args.screens or [*SCREENS, *POPUPS]:
         screen = build_screen(name)
         screen.resize(width, height)
         screen.show()

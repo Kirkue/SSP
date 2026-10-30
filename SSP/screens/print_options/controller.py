@@ -27,6 +27,7 @@ class PrintOptionsController(QWidget):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller ---
         self.view.back_button_clicked.connect(self._go_back)
+        self.view.voucher_balance_clicked.connect(self.main_app.open_voucher_balance)
         self.view.continue_button_clicked.connect(self._continue_to_payment)
         self.view.bw_mode_clicked.connect(self._set_bw_mode)
         self.view.color_mode_clicked.connect(self._set_color_mode)

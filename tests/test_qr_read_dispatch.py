@@ -26,6 +26,17 @@ class Recorder:
         return lambda *args: self.calls.append((name, *args))
 
 
+class BalancePopup:
+    """The "Check voucher balance" popup: open or closed, recording the reads it's handed."""
+
+    def __init__(self):
+        self.is_open = False
+        self.calls = []
+
+    def check_voucher_code(self, text):
+        self.calls.append(("check_voucher_code", text))
+
+
 class FakeClock:
     def __init__(self):
         self.now = 100.0
@@ -53,7 +64,7 @@ def app(sessions):
         clock=clock,
         current=current,
         payment_screen=Recorder(),
-        voucher_balance_screen=Recorder(),
+        voucher_balance=BalancePopup(),
         opened=[],
         activity=[],
         qr_session_manager=sessions,
@@ -61,6 +72,7 @@ def app(sessions):
         stacked_widget=SimpleNamespace(currentWidget=lambda: current),
     )
     fake._current_screen_name = lambda: fake.screen
+    fake._qr_context = lambda: PrintingSystemApp._qr_context(fake)
     fake.note_activity = lambda: fake.activity.append(1)
     fake.open_session_files = lambda source, files: fake.opened.append(source) or True
     fake.read = lambda text: PrintingSystemApp._on_qr_read(fake, text)
@@ -79,16 +91,38 @@ def test_any_read_counts_as_activity_so_the_screen_does_not_time_out(app):
 def test_voucher_read_on_payment_is_applied(app):
     app.read("V1:ABCD1234")
     assert app.payment_screen.calls == [("apply_voucher_code", "V1:ABCD1234")]
-    assert app.voucher_balance_screen.calls == []
+    assert app.voucher_balance.calls == []
     assert app.current.calls == []
 
 
-def test_voucher_read_on_balance_check_is_checked(app):
-    app.screen = "voucher_balance"
+@pytest.mark.parametrize("screen", ["homepage", "printing_options"])
+def test_voucher_read_with_the_balance_popup_open_checks_the_balance(app, screen):
+    """The popup wins over whatever screen is underneath."""
+    app.screen = screen
+    app.voucher_balance.is_open = True
     app.read("V1:ABCD1234")
-    assert app.voucher_balance_screen.calls == [("check_voucher_code", "V1:ABCD1234")]
+    assert app.voucher_balance.calls == [("check_voucher_code", "V1:ABCD1234")]
     assert app.payment_screen.calls == []
     assert app.current.calls == []
+
+
+def test_closing_the_popup_restores_the_screens_own_behaviour(app):
+    app.screen = "homepage"
+    app.voucher_balance.is_open = True
+    app.read("V1:AAAA1111")
+    app.voucher_balance.is_open = False
+    app.clock.now += 5
+    app.read("V1:BBBB2222")
+    assert app.voucher_balance.calls == [("check_voucher_code", "V1:AAAA1111")]
+    assert app.current.calls == [("show_qr_message", MSG_VOUCHER_AT_PAYMENT)]
+
+
+def test_a_voucher_read_on_payment_applies_it_there(app):
+    """Payment has no balance popup: a read applies the voucher, as before."""
+    app.screen = "payment"
+    app.read("V1:ABCD1234")
+    assert app.payment_screen.calls == [("apply_voucher_code", "V1:ABCD1234")]
+    assert app.voucher_balance.calls == []
 
 
 @pytest.mark.parametrize("screen", ["idle", "homepage", "wifi", "email"])
@@ -97,7 +131,7 @@ def test_voucher_read_elsewhere_says_vouchers_are_for_payment(app, screen):
     app.read("V1:ABCD1234")
     assert app.current.calls == [("show_qr_message", MSG_VOUCHER_AT_PAYMENT)]
     assert app.payment_screen.calls == []
-    assert app.voucher_balance_screen.calls == []
+    assert app.voucher_balance.calls == []
 
 
 def test_several_voucher_reads_on_payment_are_applied_in_the_order_read(app):
@@ -114,11 +148,15 @@ def test_repeat_read_within_the_window_is_applied_once(app):
     assert len(app.payment_screen.calls) == 1
 
 
-@pytest.mark.parametrize("screen", ["payment", "voucher_balance"])
-def test_voucher_screens_ignore_session_and_malformed_reads(app, sessions, screen):
-    app.screen = screen
+@pytest.mark.parametrize("where", ["payment", "balance_popup"])
+def test_voucher_screens_ignore_session_and_malformed_reads(app, sessions, where):
+    if where == "payment":
+        app.screen = "payment"
+    else:
+        app.screen = "homepage"
+        app.voucher_balance.is_open = True
     session = sessions.create_session("wifi", [{"path": "/tmp/a.pdf", "original_filename": "a.pdf"}])
     app.read(f"{session.session_id}:{session.otp}")
     app.read("garbage")
-    assert app.payment_screen.calls == app.voucher_balance_screen.calls == app.current.calls == []
+    assert app.payment_screen.calls == app.voucher_balance.calls == app.current.calls == []
     assert app.opened == []

@@ -71,7 +71,8 @@ _VOUCHER_PREFIX = "V1:"
 # screen ignores reads silently.
 _ACCEPTING_SCREENS = {"idle", "homepage", "wifi", "email"}
 # Screens that take a Voucher payload, and what to do with it there. They
-# ignore every other read silently.
+# ignore every other read silently. "voucher_balance" is the balance popup, not a
+# screen: main_app passes it as the context while the popup is open (_qr_context).
 _VOUCHER_SCREENS = {"payment": "apply_voucher", "voucher_balance": "check_voucher"}
 _KIOSK_SOURCES = {"wifi", "email"}
 
