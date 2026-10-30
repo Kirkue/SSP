@@ -57,7 +57,10 @@ from managers.persistent_gpio import cleanup_persistent_gpio
 from managers.gpio_check import gpio_problem
 from config import get_config
 from ui.scaling import apply_ui_scale, pin_render_environment
+from managers.timeout_manager import TimeoutManager
+from ui.activity_filter import ActivityFilter
 from ui.tap_guard import ScreenChangeTapGuard
+from ui.timeout_warning import TimeoutWarning
 from ui.theme import apply_theme, render_summary, COLORS
 
 
@@ -138,14 +141,25 @@ class PrintingSystemApp(QMainWindow):
         self._place_timer_label()
         self.global_timer_label.hide()
 
-        self.countdown_timer = QTimer(self)
-        self.countdown_timer.timeout.connect(self._update_countdown)
+        # The one inactivity timeout (managers/timeout_manager.py): it drives the label above
+        # and the "Still there?" prompt, and runs each screen's timeout action.
+        config = get_config()
+        self.timeouts = TimeoutManager(config.timeout_warning_seconds, config.timeout_extend_seconds, parent=self)
+        self.timeout_warning = TimeoutWarning(config.timeout_extend_seconds, self)
+        self.timeouts.tick.connect(self._on_timeout_tick)
+        self.timeouts.warning_shown.connect(self.timeout_warning.show_warning)
+        self.timeouts.tick.connect(self.timeout_warning.update_remaining)
+        self.timeouts.warning_hidden.connect(self.timeout_warning.hide_warning)
+        self.timeouts.expired.connect(self._on_screen_timeout)
+        self.timeout_warning.extend_clicked.connect(self.timeouts.extend)
+        # Any tap counts as activity. Installed before the tap guard so the guard, which
+        # Qt runs first, can drop a doubled tap before it gets here.
+        self.activity_filter = ActivityFilter(self.timeouts.note_tap, parent=self)
+        QApplication.instance().installEventFilter(self.activity_filter)
 
         # Drops the panel's doubled tap that would land on the next screen (ui/tap_guard.py)
         self.tap_guard = ScreenChangeTapGuard(parent=self)
         QApplication.instance().installEventFilter(self.tap_guard)
-
-        self.remaining_seconds = 0
 
         # Initialize all screen controllers
         self.idle_screen = IdleController(self)
@@ -357,6 +371,7 @@ class PrintingSystemApp(QMainWindow):
 
     def _on_qr_read(self, text):
         """One read from the reader (or the SIM injector): de-duplicate, classify, decide, act."""
+        self.note_activity()   # someone is at the kiosk, even if the read is rejected
         if self._qr_duplicates.is_duplicate(text):
             print("QR read ignored: identical read just now")
             return
@@ -558,10 +573,7 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.setCurrentIndex(target_index)
         self.tap_guard.arm()
 
-        if screen_name == "idle":
-            self.stop_global_countdown()
-        else:
-            self.start_global_countdown(60)
+        self._enter_timeout(screen_name)
 
         # Call on_enter lifecycle method for new screen
         new_widget = self.stacked_widget.currentWidget()
@@ -852,32 +864,55 @@ class PrintingSystemApp(QMainWindow):
             print(f"CRITICAL: could not show the refund voucher: {e}")
             return False
 
-    def start_global_countdown(self, seconds=60):
-        self.remaining_seconds = seconds
-        self.global_timer_label.show()
-        self.global_timer_label.setText(f"Remaining Time: {self.remaining_seconds:02d}s")
+    def _enter_timeout(self, screen_name):
+        """Hand the timeout manager the screen's policy. A screen without a
+        `timeout_policy()` (idle, thank_you, admin, data_viewer) has no timeout or label."""
+        widget = self.stacked_widget.currentWidget()
+        make_policy = getattr(widget, 'timeout_policy', None)
+        try:
+            policy = make_policy() if callable(make_policy) else None
+        except Exception as e:
+            print(f"⚠️ Could not read {screen_name}'s timeout policy: {e}")
+            policy = None
+        self.timeouts.enter(screen_name, policy)
+
+    def note_activity(self):
+        """Something other than a tap showed the customer is there (a coin, a bill, a QR read)."""
+        self.timeouts.note_activity()
+
+    def _on_timeout_tick(self, seconds_left):
+        """Keeps the 'Remaining Time' label on the timeout manager's own countdown."""
+        if seconds_left is None:
+            self.global_timer_label.hide()
+            return
+        self.global_timer_label.setText(f"Remaining Time: {seconds_left:02d}s")
         self._place_timer_label()
-        self.countdown_timer.start(1000)
+        self.global_timer_label.show()
+
+    def _on_screen_timeout(self, screen_name, action):
+        """A screen's time ran out. Only acts if that screen is still the one showing, so a
+        timeout can never pull the customer off a screen they've since moved to."""
+        if self._current_screen_name() != screen_name:
+            print(f"⏰ Ignoring stale timeout for '{screen_name}' (now on '{self._current_screen_name()}')")
+            return
+        print(f"⏰ '{screen_name}' timed out")
+        if action is not None:
+            action()
+
+    def end_session(self):
+        """Clear what a customer who walked away left behind: the copies of their USB, Wi-Fi
+        and email files, so the next customer can't find them."""
+        try:
+            from managers.usb_file_manager import USBFileManager
+            USBFileManager().cleanup_all_temp_folders()
+        except Exception as e:
+            print(f"⚠️ Could not clear the session's files: {e}")
 
     def _place_timer_label(self):
         """Fit the chip to its text, right-aligned and vertically centred in the 72px header."""
         label = self.global_timer_label
         label.adjustSize()
         label.move(self.width() - label.width() - 28, (72 - label.height()) // 2)
-
-    def stop_global_countdown(self):
-        self.countdown_timer.stop()
-        self.global_timer_label.hide()
-
-    def _update_countdown(self):
-        self.remaining_seconds -= 1
-
-        if self.remaining_seconds <= 0:
-            self.stop_global_countdown()
-            return
-
-        self.global_timer_label.setText(f"Remaining Time: {self.remaining_seconds:02d}s")
-        self._place_timer_label()
 
     def cleanup(self):
         """

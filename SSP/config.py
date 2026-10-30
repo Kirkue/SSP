@@ -197,6 +197,24 @@ class Config:
         """Get minimum pixel count threshold for color detection."""
         return self.get('PIXEL_COUNT_THRESHOLD', int)
 
+    # Inactivity timeout (managers/timeout_manager.py)
+
+    @property
+    def timeout_warning_seconds(self) -> int:
+        """Seconds left at which the "Still there?" prompt appears (default 15)."""
+        try:
+            return max(1, self.get('TIMEOUT_WARNING_SECONDS', int))
+        except KeyError:
+            return 15
+
+    @property
+    def timeout_extend_seconds(self) -> int:
+        """Seconds the prompt's button adds (default 30)."""
+        try:
+            return max(1, self.get('TIMEOUT_EXTEND_SECONDS', int))
+        except KeyError:
+            return 30
+
     # Supplies
 
     @property

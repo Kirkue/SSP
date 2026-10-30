@@ -11,7 +11,8 @@
 # screen" redirect can't yank them off it.
 
 from PyQt5.QtWidgets import QWidget, QGridLayout
-from PyQt5.QtCore import QTimer
+
+from managers.timeout_manager import TimeoutPolicy
 
 from .model import VoucherModel
 from .view import VoucherScreenView
@@ -28,10 +29,6 @@ class VoucherController(QWidget):
 
         self.model = VoucherModel()
         self.view = VoucherScreenView()
-
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._continue)
 
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -59,14 +56,14 @@ class VoucherController(QWidget):
 
     def on_enter(self):
         print("Voucher screen entered")
-        # show_screen() just started the usual 60s countdown; show this screen's
-        # longer one instead, so the customer can see how long they have.
-        self.main_app.start_global_countdown(TIMEOUT_MS // 1000)
-        self.timeout_timer.start(TIMEOUT_MS)
+
+    def timeout_policy(self):
+        # A fixed 3 minutes however much they tap, shown on the label so the customer can
+        # see how long they have; then carry on. Nothing to warn about: it just continues.
+        return TimeoutPolicy(seconds=TIMEOUT_MS // 1000, action=self._continue, warn=False, taps_reset=False)
 
     def on_leave(self):
         print("Voucher screen leaving")
-        self.timeout_timer.stop()
         # The code must not outlive the screen.
         self.model.clear()
         self.view.clear()
@@ -79,7 +76,6 @@ class VoucherController(QWidget):
         if self._continuing:
             return
         self._continuing = True
-        self.timeout_timer.stop()
         self.view.set_busy()
         on_continue, self._on_continue = self._on_continue, None
         if on_continue:

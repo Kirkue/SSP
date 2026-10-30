@@ -37,6 +37,14 @@ Each screen under `screens/<name>/` follows MVC with three files:
 
 Customer flow: `idle` → `usb` → `file_browser` → `printing_options` → `payment` → `thank_you`. `admin` and `data_viewer` are side-paths reached via a PIN dialog (`screens/dialogs/pin_dialog/`).
 
+### Inactivity timeout
+
+One timeout for the whole kiosk: `main_app.timeouts` (`managers/timeout_manager.py`), not a timer per screen. A screen declares a `timeout_policy()` on its controller (a `TimeoutPolicy`: seconds, the `action` to run on expiry, an optional `busy()` check, `warn`, `taps_reset`); `show_screen()` hands it over via `_enter_timeout()`. No `timeout_policy()` means no timeout and no label: `idle`, `thank_you`, `admin`, `data_viewer`. The "Remaining Time" label and the expiry read the same deadline, so they can't drift apart, and an expiry only acts if its screen is still the one showing (`_on_screen_timeout`).
+
+Any tap anywhere restarts it (`ui/activity_filter.py`, an app-wide filter, so screens don't wire buttons to a timer); coins, bills and QR reads call `main_app.note_activity()`. With `TIMEOUT_WARNING_SECONDS` (15) left a modal "Still there?" prompt (`ui/timeout_warning.py`) offers `TIMEOUT_EXTEND_SECONDS` (30) more; on payment it says what happens to cash already inserted. A `busy()` screen never expires (payment while change is dispensing, the scanner mid-scan, homepage behind the PIN dialog). `voucher` (3 min) and `scan_result` (60 s) have fixed countdowns: no prompt, taps don't restart them.
+
+Where an expiry goes: before a file is chosen (`homepage`, `usb`, `wifi`, `email`, `scanner`, `voucher_balance`) back to `idle`; mid-flow (`file_browser`, `print_options`, `payment`, `scan_destination`) back to the `homepage`, with `main_app.end_session()` clearing the customer's temp files. Payment's cash still becomes a Voucher through `show_screen()`'s carried-credit redirect. `tests/test_timeout_manager.py` drives it on a fake clock.
+
 ### Background threads
 
 Two persistent `QThread` managers are started in `PrintingSystemApp.__init__` and stopped in `cleanup()`:

@@ -7,7 +7,7 @@ and logs the transaction to a temp SQLite DB.
 
 Only the edges are faked: the coin/bill acceptor (a per-test stand-in for the
 persistent_gpio singleton, which would otherwise outlive each PaymentModel),
-main_app (screen navigation, paper check, the global countdown label), the
+main_app (screen navigation, paper check, the timeout manager on a fake clock), the
 per-coin hopper call (ChangeDispenser._dispense_coin) when a test needs a
 hopper to fail, QR image rendering, and the operator SMS send.
 """
@@ -28,6 +28,7 @@ import managers.voucher_manager as vm  # noqa: E402
 import screens.payment.model as payment_module  # noqa: E402
 from database.db_manager import DatabaseManager  # noqa: E402
 from database.models import init_db  # noqa: E402
+from managers.timeout_manager import TimeoutManager  # noqa: E402
 from managers.voucher_manager import VoucherManager  # noqa: E402
 from managers.print_refund import record_print_success, refund_failed_print  # noqa: E402
 from screens.payment.model import PaymentModel, ShortfallCause, redirect_for_carried_credit  # noqa: E402
@@ -62,7 +63,10 @@ class FakeMainApp:
         self.admin_screen = FakeAdminScreen()
         self.db_threader = None
         self.screens = []
-        self.countdown = None
+        # The real timeout manager on a clock the tests move by hand (advance_time)
+        self.clock = SimpleNamespace(now=1000.0)
+        self.timeouts = TimeoutManager(clock=lambda: self.clock.now)
+        self.timeouts.expired.connect(lambda name, action: action() if action else None)
         self.payment_screen = SimpleNamespace(model=None)
         self.voucher_screen = VoucherController(self)
         self.scan_result_screen = SimpleNamespace(
@@ -76,20 +80,25 @@ class FakeMainApp:
 
     def show_screen(self, name):
         # Like PrintingSystemApp.show_screen: leave, (abandoned payment -> voucher),
-        # start the 60s countdown, enter.
+        # hand the new screen's timeout policy to the manager, enter.
         if self.screens and self.screens[-1] == 'voucher':
             self.voucher_screen.on_leave()
         name = redirect_for_carried_credit(self, name)
         self.screens.append(name)
-        self.countdown = 60
+        self.timeouts.enter(name, self.voucher_screen.timeout_policy() if name == 'voucher' else None)
         if name == 'voucher':
             self.voucher_screen.on_enter()
 
-    def start_global_countdown(self, seconds=60):
-        self.countdown = seconds
+    def note_activity(self):
+        self.timeouts.note_activity()
 
-    def stop_global_countdown(self):
-        self.countdown = None
+    def end_session(self):
+        pass
+
+    def advance_time(self, seconds):
+        """Moves the fake clock on and lets the timeout manager notice."""
+        self.clock.now += seconds
+        self.timeouts.poll()
 
 
 @pytest.fixture(scope='module')
@@ -267,9 +276,11 @@ def test_inserted_money_restarts_the_payment_timeout(kiosk):
     screen.set_payment_data(options.get_payment_data())
     screen.on_enter()
     try:
-        screen.timeout_timer.start(1000)  # as if 59 s had gone by
+        main_app.timeouts.enter('payment', screen.timeout_policy())
+        main_app.advance_time(59)
+        assert main_app.timeouts.seconds_left() == 1
         screen.model.persistent_gpio.coin_inserted.emit(1)
-        assert screen.timeout_timer.remainingTime() > 50000
+        assert main_app.timeouts.seconds_left() == 60
     finally:
         screen.on_leave()
 
@@ -418,10 +429,13 @@ class TestVoucherScreenTiming:
 
         pay(main_app, model, 4)
 
-        screen = main_app.voucher_screen
-        assert main_app.countdown == 180
-        assert screen.timeout_timer.isActive()
-        assert screen.timeout_timer.interval() == 180_000
+        assert main_app.timeouts.current_screen == 'voucher'
+        assert main_app.timeouts.seconds_left() == 180
+        # fixed: taps don't restart it and there is no "Still there?" prompt
+        main_app.advance_time(100)
+        main_app.timeouts.note_tap()
+        assert main_app.timeouts.seconds_left() == 80
+        assert not main_app.timeouts.warning_visible
         finish(main_app, model)
 
     def test_timeout_continues_to_thank_you_and_keeps_the_voucher(self, kiosk, db):
@@ -430,7 +444,7 @@ class TestVoucherScreenTiming:
         pay(main_app, model, 4)
         code = main_app.voucher_screen.view.code_label.text()
 
-        main_app.voucher_screen.timeout_timer.start(1)  # fast-forward the 3 minutes
+        main_app.advance_time(180)  # the 3 minutes are up
         wait_for(lambda: main_app.screens[-1] == 'thank_you', "the voucher screen to time out")
 
         assert main_app.voucher_screen.view.code_label.text() == ""  # code wiped on leave
@@ -917,7 +931,7 @@ class TestCarriedCredit:
 
         assert main_app.screens == ['voucher']
         assert VoucherManager(db).balance(displayed(main_app).code).remaining == 20
-        main_app.voucher_screen.timeout_timer.start(1)  # nobody taps: it still moves on
+        main_app.advance_time(180)  # nobody taps: it still moves on
         wait_for(lambda: main_app.screens[-1] == 'idle', "the voucher screen to time out")
 
     def test_the_voucher_can_pay_for_the_next_job(self, kiosk, db):

@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QWidget, QGridLayout
 from PyQt5.QtCore import QTimer
 
 from managers.scan_progress import progress_fraction
+from managers.timeout_manager import TimeoutPolicy
 
 from .model import ScannerModel
 from .view import ScannerScreenView
@@ -22,10 +23,6 @@ class ScannerController(QWidget):
         self.view = ScannerScreenView()
         self._scan_completed = False
 
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         # Paces the progress bar while a page is being scanned
         self._progress_started = None
         self._progress_expected = 0.0
@@ -41,19 +38,14 @@ class ScannerController(QWidget):
 
     def _connect_signals(self):
         self.view.cancel_clicked.connect(self._handle_cancel)
-        self.view.cancel_clicked.connect(self._reset_timeout)
 
         self.view.scan_page_clicked.connect(self._handle_scan_page)
-        self.view.scan_page_clicked.connect(self._reset_timeout)
 
         self.view.rescan_clicked.connect(self._handle_rescan)
-        self.view.rescan_clicked.connect(self._reset_timeout)
 
         self.view.done_clicked.connect(self._handle_done)
-        self.view.done_clicked.connect(self._reset_timeout)
 
         self.view.colour_toggled.connect(self.model.set_colour)
-        self.view.colour_toggled.connect(self._reset_timeout)
 
         self.model.busy_changed.connect(self._on_busy_changed)
         self.model.page_scanned.connect(self._handle_page_scanned)
@@ -124,24 +116,19 @@ class ScannerController(QWidget):
         self.model.start_session()
         self._stop_progress()
         self.view.reset(self.model.colour)
-        self.timeout_timer.start(60000)
 
     def on_leave(self):
         print("Scanner screen leaving")
-        self.timeout_timer.stop()
         self._stop_progress()
         if not self._scan_completed:
             self.model.cancel()
 
-    def _on_timeout(self):
-        print("⏰ Scanner screen timeout - returning to homepage")
-        self.model.cancel()
-        self.main_app.show_screen('homepage')
+    def timeout_policy(self):
+        # A scan takes ~9-20 s and the pages scanned so far are lost on timeout, so never
+        # time out under a running scan.
+        return TimeoutPolicy(seconds=60, action=self._on_timeout, busy=self.model.is_busy)
 
-    def _reset_timeout(self):
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(60)
+    def _on_timeout(self):
+        print("⏰ Scanner screen timeout - returning to idle screen")
+        self.model.cancel()
+        self.main_app.show_screen('idle')

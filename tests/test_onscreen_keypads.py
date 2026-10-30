@@ -66,22 +66,22 @@ class TestCodeScreenKeypad:
 
 
 @pytest.mark.parametrize("name", ["wifi", "email"])
-def test_keypad_presses_keep_the_code_screen_awake(qapp, name):
+def test_code_screens_time_out_to_idle_after_a_minute(qapp, name):
+    """Typing counts as activity because it's taps, which main_app's app-wide filter sees
+    (tests/test_timeout_manager.py); the screen itself only declares its policy."""
     import importlib
     model_module = importlib.import_module(f"screens.{name}.model")
     controller_module = importlib.import_module(f"screens.{name}.controller")
     main_app = MagicMock()
-    main_app.stacked_widget = QStackedWidget()
     with patch.object(model_module, "DatabaseManager", MagicMock):
         controller_class = getattr(controller_module, f"{name.capitalize()}Controller")
         screen = controller_class(main_app)
-    main_app.stacked_widget.addWidget(screen)
-    main_app.stacked_widget.setCurrentWidget(screen)
 
-    press(screen.view, "7")
-    main_app.start_global_countdown.assert_called_once_with(60)
-    assert screen.timeout_timer.isActive()
-    screen.timeout_timer.stop()
+    policy = screen.timeout_policy()
+    assert policy.seconds == 60 and policy.warn and policy.taps_reset
+
+    policy.action()
+    main_app.show_screen.assert_called_once_with('idle')
 
 
 class TestAdminInkKeypad:

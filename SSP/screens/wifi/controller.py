@@ -1,8 +1,8 @@
 # screens/wifi/controller.py
 
 from PyQt5.QtWidgets import QWidget, QGridLayout
-from PyQt5.QtCore import QTimer
 
+from managers.timeout_manager import TimeoutPolicy
 from managers.webapp_thread import wifi_portal_url
 
 from .model import WifiModel
@@ -19,10 +19,6 @@ class WifiController(QWidget):
         self.model = WifiModel()
         self.view = WifiScreenView()
 
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.view, 0, 0)
@@ -31,12 +27,8 @@ class WifiController(QWidget):
 
     def _connect_signals(self):
         self.view.back_button_clicked.connect(self._go_back)
-        self.view.back_button_clicked.connect(self._reset_timeout)
-
-        self.view.otp_entry_activity.connect(self._reset_timeout)
 
         self.view.send_otp_clicked.connect(self._handle_send_otp)
-        self.view.send_otp_clicked.connect(self._reset_timeout)
 
         self.model.otp_result.connect(self._handle_otp_result)
 
@@ -72,25 +64,19 @@ class WifiController(QWidget):
             self.view.set_portal_hint(wifi_portal_url(tls=tls))
         except Exception as e:
             print(f"Could not resolve Wi-Fi portal URL: {e}")
-        self.timeout_timer.start(60000)
 
     def on_leave(self):
         print("WiFi screen leaving")
-        self.timeout_timer.stop()
 
     def refresh_files(self):
         """Called by file_browser when the user wants to add another
         wifi-sourced document — send them back to enter a fresh code."""
         self.main_app.show_screen('wifi')
 
-    def _on_timeout(self):
-        print("⏰ WiFi screen timeout - returning to homepage")
-        self.main_app.show_screen('homepage')
+    def timeout_policy(self):
+        return TimeoutPolicy(seconds=60, action=self._on_timeout)
 
-    def _reset_timeout(self):
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(60)
+    def _on_timeout(self):
+        # No file has been chosen yet, so nothing to clear: back to idle.
+        print("⏰ WiFi screen timeout - returning to idle screen")
+        self.main_app.show_screen('idle')

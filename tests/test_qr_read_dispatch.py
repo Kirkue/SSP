@@ -55,14 +55,25 @@ def app(sessions):
         payment_screen=Recorder(),
         voucher_balance_screen=Recorder(),
         opened=[],
+        activity=[],
         qr_session_manager=sessions,
         _qr_duplicates=DuplicateReadFilter(window_seconds=3, clock=clock),
         stacked_widget=SimpleNamespace(currentWidget=lambda: current),
     )
     fake._current_screen_name = lambda: fake.screen
+    fake.note_activity = lambda: fake.activity.append(1)
     fake.open_session_files = lambda source, files: fake.opened.append(source) or True
     fake.read = lambda text: PrintingSystemApp._on_qr_read(fake, text)
     return fake
+
+
+def test_any_read_counts_as_activity_so_the_screen_does_not_time_out(app):
+    """Someone is at the kiosk, whether or not the read is accepted or a repeat."""
+    app.read("V1:ABCD1234")
+    app.clock.now += 1
+    app.read("V1:ABCD1234")      # a duplicate, dropped
+    app.read("not a known payload")
+    assert len(app.activity) == 3
 
 
 def test_voucher_read_on_payment_is_applied(app):

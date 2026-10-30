@@ -1,9 +1,9 @@
 # screens/email/controller.py
 
 from PyQt5.QtWidgets import QWidget, QGridLayout
-from PyQt5.QtCore import QTimer
 
 from config import get_config
+from managers.timeout_manager import TimeoutPolicy
 
 from .model import EmailModel
 from .view import EmailScreenView
@@ -19,10 +19,6 @@ class EmailController(QWidget):
         self.model = EmailModel()
         self.view = EmailScreenView()
 
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.view, 0, 0)
@@ -31,12 +27,8 @@ class EmailController(QWidget):
 
     def _connect_signals(self):
         self.view.back_button_clicked.connect(self._go_back)
-        self.view.back_button_clicked.connect(self._reset_timeout)
-
-        self.view.otp_entry_activity.connect(self._reset_timeout)
 
         self.view.send_otp_clicked.connect(self._handle_send_otp)
-        self.view.send_otp_clicked.connect(self._reset_timeout)
 
         self.model.otp_result.connect(self._handle_otp_result)
 
@@ -71,25 +63,19 @@ class EmailController(QWidget):
             self.view.set_email_hint(config.email_user, config.email_subject_keyword)
         except Exception as e:
             print(f"Could not resolve email intake hint: {e}")
-        self.timeout_timer.start(60000)
 
     def on_leave(self):
         print("Email screen leaving")
-        self.timeout_timer.stop()
 
     def refresh_files(self):
         """Called by file_browser when the user wants to add another
         email-sourced document — send them back to enter a fresh code."""
         self.main_app.show_screen('email')
 
-    def _on_timeout(self):
-        print("⏰ Email screen timeout - returning to homepage")
-        self.main_app.show_screen('homepage')
+    def timeout_policy(self):
+        return TimeoutPolicy(seconds=60, action=self._on_timeout)
 
-    def _reset_timeout(self):
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(60)
+    def _on_timeout(self):
+        # No file has been chosen yet, so nothing to clear: back to idle.
+        print("⏰ Email screen timeout - returning to idle screen")
+        self.main_app.show_screen('idle')

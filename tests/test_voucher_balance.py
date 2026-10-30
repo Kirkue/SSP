@@ -4,12 +4,13 @@ HomepageController and VoucherBalanceController (offscreen Qt) against a temp
 SQLite DB, with Vouchers issued by the real VoucherManager.issue() path.
 
 Only main_app is faked: a real QStackedWidget plus show_screen()'s
-leave/enter lifecycle and the global countdown label.
+leave/enter lifecycle and the timeout manager on a fake clock.
 """
 import locale
 import os
 import sqlite3
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,6 +21,7 @@ import managers.voucher_manager as vm  # noqa: E402
 import screens.voucher_balance.model as balance_module  # noqa: E402
 from database.db_manager import DatabaseManager  # noqa: E402
 from database.models import init_db  # noqa: E402
+from managers.timeout_manager import TimeoutManager  # noqa: E402
 from managers.voucher_manager import MSG_FULLY_USED, MSG_UNKNOWN, VoucherManager  # noqa: E402
 from screens.homepage.controller import HomepageController  # noqa: E402
 from screens.voucher_balance.controller import TIMEOUT_MS, VoucherBalanceController  # noqa: E402
@@ -43,7 +45,9 @@ class FakeMainApp:
     def __init__(self):
         self.stacked_widget = QStackedWidget()
         self.screens = []
-        self.countdown = None
+        self.timeclock = SimpleNamespace(now=1000.0)
+        self.timeouts = TimeoutManager(clock=lambda: self.timeclock.now)
+        self.timeouts.expired.connect(lambda name, action: action() if action else None)
         self.homepage_screen = HomepageController(self)
         self.voucher_balance_screen = VoucherBalanceController(self)
         self._by_name = {
@@ -62,11 +66,13 @@ class FakeMainApp:
         if widget is None:
             return  # idle/usb/...: not part of these tests
         self.stacked_widget.setCurrentWidget(widget)
-        self.countdown = 60
+        make_policy = getattr(widget, 'timeout_policy', None)
+        self.timeouts.enter(name, make_policy() if make_policy else None)
         widget.on_enter()
 
-    def start_global_countdown(self, seconds=60):
-        self.countdown = seconds
+    def advance_time(self, seconds):
+        self.timeclock.now += seconds
+        self.timeouts.poll()
 
 
 @pytest.fixture(scope='module')
@@ -162,20 +168,23 @@ class TestNavigation:
         screen.view.back_button.click()
         assert kiosk.screens[-1] == 'homepage'
 
-    def test_inactivity_returns_to_homepage(self, kiosk):
-        screen = open_balance_check(kiosk)
-        assert screen.timeout_timer.isActive()
-        assert screen.timeout_timer.interval() == TIMEOUT_MS == 60000
-        screen.timeout_timer.timeout.emit()
-        assert kiosk.screens[-1] == 'homepage'
+    def test_inactivity_returns_to_idle(self, kiosk):
+        open_balance_check(kiosk)
+        assert kiosk.timeouts.current_screen == 'voucher_balance'
+        assert kiosk.timeouts.seconds_left() == TIMEOUT_MS // 1000 == 60
+        kiosk.advance_time(60)
+        assert kiosk.screens[-1] == 'idle'
 
-    def test_checking_a_code_restarts_the_countdown(self, kiosk, issue):
-        v = issue(7)
-        screen = open_balance_check(kiosk)
-        kiosk.countdown = 5
-        check(screen, v.display_code)
-        assert kiosk.countdown == 60
-        assert screen.timeout_timer.isActive()
+    def test_a_tap_or_qr_read_restarts_the_countdown(self, kiosk):
+        """Taps and QR reads are counted app-wide (ui/activity_filter.py, main_app's
+        _on_qr_read), not by this screen."""
+        open_balance_check(kiosk)
+        kiosk.advance_time(40)
+        kiosk.timeouts.note_tap()
+        assert kiosk.timeouts.seconds_left() == 60
+        kiosk.advance_time(40)
+        kiosk.timeouts.note_activity()
+        assert kiosk.timeouts.seconds_left() == 60
 
     def test_leaving_wipes_the_result(self, kiosk, issue):
         v = issue(7)
@@ -213,12 +222,10 @@ class TestBalance:
         screen = open_balance_check(kiosk)
         keys = screen.view.keypad.key_buttons
         assert set(keys) == set(vm.CODE_ALPHABET) | {BACKSPACE_KEY}
-        kiosk.countdown = 5
         keys["Z"].click()
         keys[BACKSPACE_KEY].click()
         for ch in v.code:
             keys[ch].click()
-        assert kiosk.countdown == 60  # each key press keeps the screen awake
         screen.view.check_button.click()
         assert not screen.view.result_panel.isHidden()
         assert screen.view.amount_label.text() == f"{PESO}7"
@@ -227,12 +234,10 @@ class TestBalance:
         v = issue(7)
         assert check(open_balance_check(kiosk), f"V1:{v.code}")['found']
 
-    def test_qr_read_is_checked_and_keeps_the_screen_awake(self, kiosk, issue):
+    def test_qr_read_is_checked(self, kiosk, issue):
         v = issue(7)
         screen = open_balance_check(kiosk)
-        kiosk.countdown = 5
         screen.check_voucher_code(f"V1:{v.code}")  # what main_app hands a Voucher read
-        assert kiosk.countdown == 60
         assert not screen.view.result_panel.isHidden()
         assert screen.view.amount_label.text() == f"{PESO}7"
 

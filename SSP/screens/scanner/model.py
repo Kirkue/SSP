@@ -40,6 +40,10 @@ class ScannerModel(QObject):
     def expected_scan_seconds(self) -> float:
         return self.manager.expected_scan_seconds()
 
+    def is_busy(self) -> bool:
+        """True while a scan (or building the PDF) is running; the screen can't time out then."""
+        return self.thread is not None and self.thread.isRunning()
+
     def page_count(self) -> int:
         return self.manager.page_count()
 

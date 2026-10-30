@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QMessageBox
-from PyQt5.QtCore import pyqtSignal, QTimer
+from PyQt5.QtCore import pyqtSignal
+from managers.timeout_manager import TimeoutPolicy
 from .model import FileBrowserModel
 from .view import FileBrowserView
 
@@ -20,11 +21,6 @@ class FileBrowserController(QWidget):
         self.view = FileBrowserView()
         self.source = None
 
-        # Setup timeout timer (1 minute = 60000ms)
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         # Set the view's layout as this controller's layout
         self.setLayout(self.view.main_layout)
 
@@ -40,13 +36,6 @@ class FileBrowserController(QWidget):
         self.view.rescan_button_clicked.connect(self._rescan)
         self.view.add_document_button_clicked.connect(self._add_document)
 
-        # Reset timeout on user interaction
-        self.view.back_to_idle_clicked.connect(self._reset_timeout)
-        self.view.continue_button_clicked.connect(self._reset_timeout)
-        self.view.pdf_button_clicked.connect(self._reset_timeout)
-        self.view.rescan_button_clicked.connect(self._reset_timeout)
-        self.view.add_document_button_clicked.connect(self._reset_timeout)
-
         self.view.single_page_clicked.connect(self._set_single_page_view)
         self.view.multipage_clicked.connect(self._set_multipage_view)
         self.view.select_all_clicked.connect(self._select_all_pages)
@@ -61,22 +50,6 @@ class FileBrowserController(QWidget):
         self.view.zoom_in_clicked.connect(self._zoom_in)
         self.view.zoom_out_clicked.connect(self._zoom_out)
         self.view.zoom_reset_clicked.connect(self._zoom_reset)
-
-        # Reset timeout on all preview interactions
-        self.view.single_page_clicked.connect(self._reset_timeout)
-        self.view.multipage_clicked.connect(self._reset_timeout)
-        self.view.select_all_clicked.connect(self._reset_timeout)
-        self.view.deselect_all_clicked.connect(self._reset_timeout)
-        self.view.prev_page_clicked.connect(self._reset_timeout)
-        self.view.next_page_clicked.connect(self._reset_timeout)
-        self.view.prev_grid_page_clicked.connect(self._reset_timeout)
-        self.view.next_grid_page_clicked.connect(self._reset_timeout)
-        self.view.page_widget_clicked.connect(lambda *_: self._reset_timeout())
-        self.view.page_checkbox_clicked.connect(lambda *_: self._reset_timeout())
-        self.view.single_page_checkbox_clicked.connect(lambda *_: self._reset_timeout())
-        self.view.zoom_in_clicked.connect(self._reset_timeout)
-        self.view.zoom_out_clicked.connect(self._reset_timeout)
-        self.view.zoom_reset_clicked.connect(self._reset_timeout)
 
         # --- Model -> Controller -> View ---
         self.model.files_loaded.connect(self.view.load_pdf_files)
@@ -266,31 +239,19 @@ class FileBrowserController(QWidget):
         # Don't reload PDF files here - they are loaded by USB controller
         # The files are already loaded via load_pdf_files() method
 
-        # Start timeout timer (1 minute)
-        self.timeout_timer.start(60000)
-        print("⏰ File browser screen timeout started (1 minute)")
-
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("File browser screen leaving")
         self.model.cleanup()
-        # Stop timeout timer
-        self.timeout_timer.stop()
+
+    def timeout_policy(self):
+        return TimeoutPolicy(seconds=60, action=self._on_timeout)
 
     def _on_timeout(self):
-        """Handle timeout - return to idle screen."""
-        print("⏰ File browser screen timeout - returning to idle screen")
-        self.main_app.show_screen('idle')
-
-    def _reset_timeout(self):
-        """Reset the timeout timer (call on user activity)."""
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        print("⏰ File browser screen timeout reset")
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(60)
+        """The customer walked away mid-flow: back to the homepage, files cleared."""
+        print("⏰ File browser screen timeout - returning to homepage")
+        self.main_app.end_session()
+        self.main_app.show_screen('homepage')
 
     def set_source(self, source):
         self.source = source

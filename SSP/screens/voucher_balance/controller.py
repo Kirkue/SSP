@@ -1,11 +1,11 @@
 # screens/voucher_balance/controller.py
 #
 # "Check voucher balance", reached from the homepage without starting a print
-# job. Returns to the homepage on Back or after the usual 60s of inactivity.
+# job. Returns to the homepage on Back, or to idle after the usual 60s of inactivity.
 
 from PyQt5.QtWidgets import QWidget, QGridLayout
-from PyQt5.QtCore import QTimer
 
+from managers.timeout_manager import TimeoutPolicy
 from managers.voucher_manager import CODE_ALPHABET
 from .model import VoucherBalanceModel
 from .view import VoucherBalanceScreenView
@@ -21,22 +21,16 @@ class VoucherBalanceController(QWidget):
         self.model = VoucherBalanceModel()
         self.view = VoucherBalanceScreenView(code_keys=CODE_ALPHABET)
 
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.view, 0, 0)
 
         self.view.check_clicked.connect(self.check_voucher_code)
-        self.view.input_edited.connect(self._reset_timeout)
         self.view.back_button_clicked.connect(self._go_back)
 
     def check_voucher_code(self, raw_code):
         """Check a typed code or a 'V1:<code>' payload, so a QR read can be
         passed straight in."""
-        self._reset_timeout()
         self.model.check(raw_code)
         self.view.render(self.model)
 
@@ -49,22 +43,15 @@ class VoucherBalanceController(QWidget):
         print("Voucher balance screen entered")
         self.model.clear()
         self.view.clear()
-        self.timeout_timer.start(TIMEOUT_MS)
 
     def on_leave(self):
         print("Voucher balance screen leaving")
-        self.timeout_timer.stop()
         self.model.clear()
         self.view.clear()
 
-    def _on_timeout(self):
-        print("Voucher balance screen timeout - returning to homepage")
-        self.main_app.show_screen('homepage')
+    def timeout_policy(self):
+        return TimeoutPolicy(seconds=TIMEOUT_MS // 1000, action=self._on_timeout)
 
-    def _reset_timeout(self):
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(TIMEOUT_MS)
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(TIMEOUT_MS // 1000)
+    def _on_timeout(self):
+        print("Voucher balance screen timeout - returning to idle screen")
+        self.main_app.show_screen('idle')
