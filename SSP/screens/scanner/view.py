@@ -1,6 +1,6 @@
 # screens/scanner/view.py
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
 from PyQt5.QtCore import QSize, Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 
@@ -21,6 +21,7 @@ class ScannerScreenView(QWidget):
     scan_page_clicked = pyqtSignal()
     rescan_clicked = pyqtSignal()
     done_clicked = pyqtSignal()
+    colour_toggled = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -91,7 +92,35 @@ class ScannerScreenView(QWidget):
         cards_row.addStretch()
         left_column.addLayout(cards_row)
 
-        left_column.addSpacing(16)
+        # Greyscale is the default because it scans about twice as fast; the cost of
+        # switching to colour is stated on the button.
+        self.colour_button = SecondaryButton("")
+        self.colour_button.setCheckable(True)
+        self.colour_button.toggled.connect(self._on_colour_toggled)
+        colour_row = QHBoxLayout()
+        colour_row.addStretch()
+        colour_row.addWidget(self.colour_button)
+        colour_row.addStretch()
+        left_column.addSpacing(8)
+        left_column.addLayout(colour_row)
+        self._update_colour_text(False)
+
+        left_column.addSpacing(8)
+
+        # eSCL reports no real progress, so this is paced against how long recent scans took.
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(12)
+        self.progress_bar.setStyleSheet(
+            f"QProgressBar {{ background-color: {COLORS['bg_subtle']}; border: 1px solid {COLORS['border_strong']};"
+            f" border-radius: 6px; }}"
+            f"QProgressBar::chunk {{ background-color: {COLORS['primary']}; border-radius: 5px; }}"
+        )
+        self.progress_bar.hide()
+        left_column.addWidget(self.progress_bar)
+
+        left_column.addSpacing(8)
 
         self.status_banner = StatusBanner()
         left_column.addWidget(self.status_banner)
@@ -136,7 +165,30 @@ class ScannerScreenView(QWidget):
     def show_status(self, message, is_error=True):
         self.status_banner.show_message(message, variant="error" if is_error else "success")
 
+    def _update_colour_text(self, colour: bool):
+        self.colour_button.setText("Colour: on (slower)" if colour else "Colour: off (faster)")
+
+    def _on_colour_toggled(self, colour: bool):
+        self._update_colour_text(colour)
+        self.colour_toggled.emit(colour)
+
+    def set_colour(self, colour: bool):
+        """Shows the current mode without announcing it as a change."""
+        self.colour_button.blockSignals(True)
+        self.colour_button.setChecked(colour)
+        self.colour_button.blockSignals(False)
+        self._update_colour_text(colour)
+
+    def show_progress(self, fraction: float):
+        self.progress_bar.setValue(int(round(max(0.0, min(1.0, fraction)) * 100)))
+        self.progress_bar.show()
+
+    def hide_progress(self):
+        self.progress_bar.hide()
+        self.progress_bar.setValue(0)
+
     def set_busy(self, busy: bool):
+        self.colour_button.setEnabled(not busy)
         self.scan_card.setEnabled(not busy)
         self.rescan_button.setEnabled(not busy and self._has_pages)
         self.done_button.setEnabled(not busy and self._has_pages)
@@ -165,7 +217,9 @@ class ScannerScreenView(QWidget):
         self.preview_label.setText(PREVIEW_PLACEHOLDER)
         self.preview_caption.setText("")
 
-    def reset(self):
+    def reset(self, colour: bool = False):
+        self.set_colour(colour)
+        self.hide_progress()
         self.update_page_count(0)
         self.clear_preview()
         self.show_status("")

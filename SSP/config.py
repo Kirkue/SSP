@@ -691,6 +691,15 @@ class Config:
             return 200
 
     @property
+    def scanner_colour_default(self) -> bool:
+        """Whether a scan session starts in Colour (SCANNER_MODE=Color). The default is
+        Gray, which scans about twice as fast; the scanner screen lets the customer switch."""
+        try:
+            return self.get('SCANNER_MODE', str).strip().lower() in ('color', 'colour')
+        except KeyError:
+            return False
+
+    @property
     def scanner_timeout(self) -> int:
         try:
             return self.get('SCANNER_TIMEOUT', int)

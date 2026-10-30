@@ -1,7 +1,11 @@
 # screens/scanner/controller.py
 
+import time
+
 from PyQt5.QtWidgets import QWidget, QGridLayout
 from PyQt5.QtCore import QTimer
+
+from managers.scan_progress import progress_fraction
 
 from .model import ScannerModel
 from .view import ScannerScreenView
@@ -22,6 +26,13 @@ class ScannerController(QWidget):
         self.timeout_timer.setSingleShot(True)
         self.timeout_timer.timeout.connect(self._on_timeout)
 
+        # Paces the progress bar while a page is being scanned
+        self._progress_started = None
+        self._progress_expected = 0.0
+        self.progress_timer = QTimer()
+        self.progress_timer.setInterval(200)
+        self.progress_timer.timeout.connect(self._tick_progress)
+
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.view, 0, 0)
@@ -41,19 +52,45 @@ class ScannerController(QWidget):
         self.view.done_clicked.connect(self._handle_done)
         self.view.done_clicked.connect(self._reset_timeout)
 
-        self.model.busy_changed.connect(self.view.set_busy)
+        self.view.colour_toggled.connect(self.model.set_colour)
+        self.view.colour_toggled.connect(self._reset_timeout)
+
+        self.model.busy_changed.connect(self._on_busy_changed)
         self.model.page_scanned.connect(self._handle_page_scanned)
         self.model.scan_failed.connect(self._handle_scan_failed)
         self.model.scan_finished.connect(self._handle_scan_finished)
         self.model.finish_failed.connect(self._handle_finish_failed)
 
     def _handle_scan_page(self):
-        self.view.show_status("Scanning...", is_error=False)
+        self._start_progress("Scanning")
         self.model.scan_page()
 
     def _handle_rescan(self):
-        self.view.show_status("Rescanning last page...", is_error=False)
+        self._start_progress("Rescanning last page")
         self.model.rescan_last()
+
+    def _start_progress(self, what):
+        self._progress_expected = self.model.expected_scan_seconds()
+        self._progress_started = time.monotonic()
+        self.view.show_status(f"{what}... about {round(self._progress_expected)} seconds.", is_error=False)
+        self.view.show_progress(0.0)
+        self.progress_timer.start()
+
+    def _tick_progress(self):
+        if self._progress_started is None:
+            return
+        elapsed = time.monotonic() - self._progress_started
+        self.view.show_progress(progress_fraction(elapsed, self._progress_expected))
+
+    def _stop_progress(self):
+        self.progress_timer.stop()
+        self._progress_started = None
+        self.view.hide_progress()
+
+    def _on_busy_changed(self, busy):
+        self.view.set_busy(busy)
+        if not busy:
+            self._stop_progress()
 
     def _handle_page_scanned(self, page_number, image_path):
         self.view.update_page_count(page_number)
@@ -85,12 +122,14 @@ class ScannerController(QWidget):
         print("Scanner screen entered")
         self._scan_completed = False
         self.model.start_session()
-        self.view.reset()
+        self._stop_progress()
+        self.view.reset(self.model.colour)
         self.timeout_timer.start(60000)
 
     def on_leave(self):
         print("Scanner screen leaving")
         self.timeout_timer.stop()
+        self._stop_progress()
         if not self._scan_completed:
             self.model.cancel()
 
