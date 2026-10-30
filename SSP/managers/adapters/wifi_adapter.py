@@ -13,11 +13,18 @@
 # written to disk. The user already reviewed the staged list client-side
 # before confirming, so a partial success would be confusing to reconcile
 # against the single OTP/QR result page.
+#
+# Past the cheap checks (MIME, size, %PDF header), each file is also opened with
+# managers.pdf_check.check_pdf, the same check the file browser applies, so the
+# customer hears about a damaged, empty or password-protected PDF on their phone
+# instead of at the kiosk. That needs a file on disk, so files are written first and
+# the whole batch is deleted again if any of them fails.
 
 import os
 import uuid
 from typing import BinaryIO, List, Optional, Tuple
 
+from managers.pdf_check import check_pdf
 from managers.session_manager import Session
 
 PDF_MAGIC = b"%PDF"
@@ -74,9 +81,9 @@ class WifiAdapter:
                 return False, error, None
             validated.append((filename, data))
 
-        # Only write to disk once every file in the batch has passed
-        # validation, keeping the all-or-nothing contract even w.r.t.
-        # partial disk writes.
+        # Only write to disk once every file in the batch has passed the cheap
+        # validation. check_pdf needs a real file, so a file that fails it removes
+        # everything written so far, keeping the all-or-nothing contract.
         saved_files = []
         for filename, data in validated:
             # Filename is stored as metadata only, never used to build a
@@ -86,6 +93,15 @@ class WifiAdapter:
             with open(dest_path, "wb") as f:
                 f.write(data)
             saved_files.append({"path": dest_path, "original_filename": filename})
+
+            _, pdf_error = check_pdf(dest_path)
+            if pdf_error:
+                for saved in saved_files:
+                    try:
+                        os.remove(saved["path"])
+                    except OSError:
+                        pass
+                return False, f"'{filename}': {pdf_error}", None
 
         session = self.session_manager.create_session(
             source="wifi",

@@ -6,6 +6,7 @@ used elsewhere, so no real filesystem location or SQLite DB is touched.
 """
 import os
 
+import fitz
 from SSP.webapp.main import app
 from fastapi.testclient import TestClient
 from webapp.dependencies import get_wifi_adapter
@@ -14,7 +15,17 @@ from managers.adapters.wifi_adapter import WifiAdapter
 from managers.session_manager import SessionManager
 from tests.test_session_manager import FakeDBManager
 
-PDF_BYTES = b"%PDF-1.4 fake pdf content"
+
+def _real_pdf(pages=1):
+    doc = fitz.open()
+    for _ in range(pages):
+        doc.new_page()
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+PDF_BYTES = _real_pdf()
 
 client = TestClient(app)
 
@@ -134,3 +145,19 @@ class TestPostUpload:
 
         assert response.status_code == 400
         assert os.listdir(tmp_path / "uploads") == [] if (tmp_path / "uploads").is_dir() else True
+
+
+class TestUploadRejectsUnprintablePdf:
+    def test_shows_the_reason_on_the_upload_page(self, tmp_path):
+        app.dependency_overrides[get_wifi_adapter] = _override_with_temp_adapter(tmp_path)
+        try:
+            response = client.post(
+                "/upload",
+                files=[("files", ("broken.pdf", b"%PDF-1.7\n" + os.urandom(4000), "application/pdf"))],
+            )
+        finally:
+            app.dependency_overrides.pop(get_wifi_adapter, None)
+
+        assert response.status_code == 400
+        assert "broken.pdf" in response.text
+        assert "damaged" in response.text

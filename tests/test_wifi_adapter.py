@@ -7,11 +7,22 @@ create_session path without touching sqlite or a running server.
 import io
 import os
 
+import fitz
+
 from managers.adapters.wifi_adapter import WifiAdapter, MAX_FILES_PER_UPLOAD
 from managers.session_manager import SessionManager
 from tests.test_session_manager import FakeDBManager
 
-PDF_BYTES = b"%PDF-1.4 fake pdf content"
+def _real_pdf(pages=1):
+    doc = fitz.open()
+    for _ in range(pages):
+        doc.new_page()
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+PDF_BYTES = _real_pdf()
 
 
 def _make_adapter(tmp_path, max_size_bytes=1024 * 1024):
@@ -141,3 +152,59 @@ class TestHandleUpload:
         success, message, session = adapter.handle_upload([])
         assert success is False
         assert session is None
+
+
+BROKEN_PDF = b"%PDF-1.7\n" + os.urandom(4000)
+
+
+def _encrypted_pdf():
+    doc = fitz.open()
+    doc.new_page()
+    data = doc.tobytes(encryption=fitz.PDF_ENCRYPT_AES_256, owner_pw="owner", user_pw="user")
+    doc.close()
+    return data
+
+
+class TestPdfCheckAtUpload:
+    """A file that has the %PDF header but can't be printed is turned away on the phone,
+    with the same reason the file browser would give at the kiosk."""
+
+    def test_rejects_a_damaged_pdf(self, tmp_path):
+        adapter, db, upload_dir = _make_adapter(tmp_path)
+        success, message, session = adapter.handle_upload(
+            [(io.BytesIO(BROKEN_PDF), "report.pdf", "application/pdf")]
+        )
+        assert success is False
+        assert session is None
+        assert "report.pdf" in message
+        assert "damaged" in message
+
+    def test_rejects_a_password_protected_pdf(self, tmp_path):
+        adapter, db, upload_dir = _make_adapter(tmp_path)
+        success, message, session = adapter.handle_upload(
+            [(io.BytesIO(_encrypted_pdf()), "secret.pdf", "application/pdf")]
+        )
+        assert success is False
+        assert "password-protected" in message
+
+    def test_a_rejected_file_leaves_nothing_on_disk(self, tmp_path):
+        adapter, db, upload_dir = _make_adapter(tmp_path)
+        adapter.handle_upload([(io.BytesIO(BROKEN_PDF), "report.pdf", "application/pdf")])
+        assert os.listdir(upload_dir) == []
+
+    def test_one_bad_file_rejects_the_batch_and_removes_the_good_ones(self, tmp_path):
+        adapter, db, upload_dir = _make_adapter(tmp_path)
+        success, message, session = adapter.handle_upload([
+            (io.BytesIO(PDF_BYTES), "good.pdf", "application/pdf"),
+            (io.BytesIO(BROKEN_PDF), "bad.pdf", "application/pdf"),
+        ])
+        assert success is False
+        assert "bad.pdf" in message
+        assert os.listdir(upload_dir) == []
+
+    def test_a_multi_page_pdf_still_passes(self, tmp_path):
+        adapter, db, upload_dir = _make_adapter(tmp_path)
+        success, message, session = adapter.handle_upload(
+            [(io.BytesIO(_real_pdf(pages=5)), "five.pdf", "application/pdf")]
+        )
+        assert success is True
