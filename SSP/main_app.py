@@ -42,6 +42,7 @@ from managers.printer_manager import PrinterManager
 from managers.hopper_manager import stop_all_hopper_motors
 from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
+from managers.ink_supply import empty_cartridges, format_alerted, low_ink_alerts, low_ink_message, parse_alerted
 from managers.webapp_thread import WebAppThreadManager
 from managers.email_poller_thread import EmailPollerThreadManager
 from managers.qr_reader import (CONNECTED, DuplicateReadFilter, QrReaderManager, classify_payload, decide_qr_read,
@@ -181,8 +182,9 @@ class PrintingSystemApp(QMainWindow):
         # Initialize printer manager (no dependencies)
         self.printer_manager = PrinterManager()
 
-        # Track low paper alert to prevent multiple SMS
-        self.low_paper_alert_sent = False
+        # Set when the printer reported the tray empty, until its print_failed arrives
+        # (the printer thread already sent the out-of-paper SMS for it)
+        self._paper_empty_reported = False
 
         # Initialize remaining screens that depend on other components
         try:
@@ -267,6 +269,7 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager.print_job_successful.connect(self.on_print_successful)
         self.printer_manager.print_job_failed.connect(self.on_print_failed)
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting)
+        self.printer_manager.paper_empty.connect(self.on_printer_paper_empty)
         print("DEBUG: Printer manager signals connected successfully with QueuedConnection")
 
         # Signal connection established successfully
@@ -431,6 +434,24 @@ class PrintingSystemApp(QMainWindow):
         if result.get('database_updated', False) and 'cmyk_levels' in result:
             print(f"CMYK levels updated: {result['cmyk_levels']}")
             self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
+            self._alert_low_ink(result['cmyk_levels'])
+
+    def _alert_low_ink(self, levels):
+        """SMS the operator once per tank that has fallen to the low-ink threshold. The
+        alerted tanks are kept in the settings table, so a tank is only re-alerted after
+        it has been topped back above the threshold."""
+        try:
+            db = self.admin_screen.db_manager
+            already = parse_alerted(db.get_setting('ink_low_alerted', default=''))
+            to_alert, alerted = low_ink_alerts(levels, already, get_config().ink_low_alert_percent)
+            if alerted != already:
+                db.update_setting('ink_low_alerted', format_alerted(alerted))
+            if to_alert:
+                print(f"⚠️ Low ink alert: {to_alert}")
+                from managers.sms_manager import send_operator_alert
+                send_operator_alert(low_ink_message(to_alert))
+        except Exception as e:
+            print(f"⚠️ Low ink alert failed: {e}")
 
     def check_paper_count_and_redirect(self, allow_admin_access=False):
         """
@@ -451,47 +472,41 @@ class PrintingSystemApp(QMainWindow):
             return True
         return False
 
-    def _low_ink_cartridges(self):
-        """{cartridge: level%} for each CMYK cartridge at or below 20%; {} if none or unknown."""
+    def _empty_ink_cartridges(self):
+        """{cartridge: level%} for each tank an admin has marked empty (0%); {} if none or unknown.
+        Low ink alone never stops the kiosk: the levels are estimates and customers can't
+        see the tanks, so only the operator's own 'empty' does (managers/ink_supply.py)."""
         cmyk_levels = self.admin_screen.db_manager.get_cmyk_ink_levels()
         if not cmyk_levels:
             print("No CMYK ink data available, skipping ink level check")
             return {}
-        low_ink_threshold = 20.0
-        return {
-            name: level
-            for name, level in cmyk_levels.items()
-            if name in ('cyan', 'magenta', 'yellow', 'black') and level <= low_ink_threshold
-        }
+        return empty_cartridges(cmyk_levels)
 
     def print_supplies_low(self):
-        """True when printing isn't possible: paper at 3 sheets or fewer, or a cartridge low."""
+        """True when printing isn't possible: paper at 3 sheets or fewer, or a tank marked empty."""
         try:
-            return self.admin_screen.get_paper_count() <= 3 or bool(self._low_ink_cartridges())
+            return self.admin_screen.get_paper_count() <= 3 or bool(self._empty_ink_cartridges())
         except Exception as e:
             print(f"Error checking print supplies: {e}")
             return False
 
     def check_ink_levels_and_redirect(self):
         """
-        Check CMYK ink levels and redirect to error screen if any cartridge is critically low.
+        Check the CMYK tanks and redirect to the error screen if an admin has marked one empty.
 
         Returns:
             bool: True if redirected (kiosk should stop), False if ink is acceptable.
         """
         try:
-            low_cartridges = self._low_ink_cartridges()
+            empty_tanks = self._empty_ink_cartridges()
 
-            if low_cartridges:
-                details = ", ".join(
-                    f"{name.capitalize()}: {level:.1f}%"
-                    for name, level in low_cartridges.items()
-                )
-                print(f"Critical low ink detected ({details}). Redirecting to error screen.")
+            if empty_tanks:
+                details = ", ".join(name.capitalize() for name in empty_tanks)
+                print(f"Ink tank marked empty ({details}). Redirecting to error screen.")
                 self.show_screen('thank_you')
                 self.thank_you_screen.show_printing_error(
-                    "Ink levels are too low to continue printing.\n"
-                    "Please contact an administrator to replace the ink cartridges."
+                    "An ink tank is empty.\n"
+                    "Please contact an administrator to refill the ink."
                 )
                 return True
 
@@ -730,14 +745,6 @@ class PrintingSystemApp(QMainWindow):
                         # Verify the update by checking the database again
                         updated_count = self.admin_screen.get_paper_count()
                         print(f"DEBUG: Verified paper count in database: {updated_count}")
-
-                        # Check for low paper alert (only send once)
-                        if new_count <= 10 and not self.low_paper_alert_sent:
-                            print(f"⚠️ Low paper alert: {new_count} sheets remaining")
-                            self.low_paper_alert_sent = True
-                        elif new_count > 10:
-                            # Reset flag if paper count goes back above threshold
-                            self.low_paper_alert_sent = False
                     else:
                         print("❌ Failed to update paper count")
                 else:
@@ -763,6 +770,15 @@ class PrintingSystemApp(QMainWindow):
         else:
             print(f"⚠️ Print waiting signal on wrong screen ({type(self.stacked_widget.currentWidget()).__name__})")
 
+    def on_printer_paper_empty(self):
+        """The printer reports its tray empty: the paper count is wrong, so zero it and
+        the kiosk stops taking customers until an admin records a refill."""
+        self._paper_empty_reported = True
+        try:
+            self.admin_screen.model.mark_paper_empty()
+        except Exception as e:
+            print(f"❌ Could not zero the paper count: {e}")
+
     def on_print_failed(self, error_message):
         """
         Handle print job failure.
@@ -776,12 +792,14 @@ class PrintingSystemApp(QMainWindow):
         """
         print(f"❌ Print job failed: {error_message}")
 
-        # Send SMS notification for all print failures
-        try:
-            from managers.sms_manager import send_printing_error_sms
-            send_printing_error_sms(error_message)
-        except Exception as sms_error:
-            print(f"⚠️ Failed to send SMS notification: {sms_error}")
+        # Send SMS notification for all print failures (a paper-out already sent its own)
+        paper_empty, self._paper_empty_reported = self._paper_empty_reported, False
+        if not paper_empty:
+            try:
+                from managers.sms_manager import send_printing_error_sms
+                send_printing_error_sms(error_message)
+            except Exception as sms_error:
+                print(f"⚠️ Failed to send SMS notification: {sms_error}")
 
         # Log error to database
         try:

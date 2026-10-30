@@ -28,6 +28,7 @@ class PrinterThread(QThread):
     print_success = pyqtSignal(str)  # Emits temp_pdf_path for ink analysis
     print_failed = pyqtSignal(str)
     print_waiting = pyqtSignal()
+    paper_empty = pyqtSignal()  # the printer itself says the tray is empty (sent just before print_failed)
 
     def __init__(self, file_path, copies, color_mode, selected_pages, printer_name):
         super().__init__()
@@ -221,6 +222,7 @@ class PrinterThread(QThread):
                                 pass
                             return False
                         elif "media-empty-error" in alerts_found or "media-needed-error" in alerts_found:
+                            self.paper_empty.emit()
                             self.print_failed.emit(f"No paper detected on {target_printer}")
                             try:
                                 send_no_paper_sms()
@@ -234,6 +236,7 @@ class PrinterThread(QThread):
                                     media_empty_sms_sent = True
                                 except Exception:
                                     pass
+                            self.paper_empty.emit()
                             self.print_failed.emit(f"No paper detected on {target_printer}")
                             return False
                         elif "paused" in alerts_found:

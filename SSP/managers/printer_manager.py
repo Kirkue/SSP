@@ -27,6 +27,7 @@ class PrinterManager(QObject):
     print_job_successful = pyqtSignal()
     print_job_failed = pyqtSignal(str)
     print_job_waiting = pyqtSignal()
+    paper_empty = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -62,6 +63,7 @@ class PrinterManager(QObject):
         self.print_thread.print_success.connect(self._on_print_success)
         self.print_thread.print_failed.connect(self.print_job_failed.emit)
         self.print_thread.print_waiting.connect(self.print_job_waiting.emit)
+        self.print_thread.paper_empty.connect(self.paper_empty.emit)
         self.print_thread.finished.connect(self.on_thread_finished)
         self.print_thread.start()
 

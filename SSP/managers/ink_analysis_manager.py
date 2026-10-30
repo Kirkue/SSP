@@ -5,6 +5,9 @@ import numpy as np
 from pdf2image import convert_from_path
 from datetime import datetime
 
+from config import get_config
+from managers.ink_supply import estimated_level_after
+
 
 class InkAnalysisManager:
     """Manages ink usage analysis for PDF files and updates database accordingly."""
@@ -161,11 +164,16 @@ class InkAnalysisManager:
         return (cyan_coverage, magenta_coverage, yellow_coverage, black_coverage)
 
     def _calculate_job_costs(self, avg_k, avg_c, avg_m, avg_y, total_pages,
-                             yield_black=17000, yield_color=17000, standard_coverage=5.0):
+                             yield_black=None, yield_color=None, standard_coverage=5.0):
         """
         Calculate percentage of cartridge the print job will use.
         Based on the original ink.py calculate_job_costs function.
+        The bottle yields default to the INK_YIELD_*_PAGES settings.
         """
+        if yield_black is None:
+            yield_black = get_config().ink_yield_black_pages
+        if yield_color is None:
+            yield_color = get_config().ink_yield_color_pages
         job_cost_black_percent = 0.0
         job_cost_color_percent = 0.0
 
@@ -258,14 +266,17 @@ class InkAnalysisManager:
                 new_cyan = current_levels['cyan']  # No change
                 new_magenta = current_levels['magenta']  # No change
                 new_yellow = current_levels['yellow']  # No change
-                new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
+                new_black = estimated_level_after(
+                    current_levels['black'], job_costs['black_cartridge_percent'] * copies_factor)
             else:
                 # For color printing, deduct from all colors
                 print("DEBUG: Color printing - deducting from all CMYK colors")
-                new_cyan = max(0, current_levels['cyan'] - (job_costs['color_cartridge_percent'] * copies_factor))
-                new_magenta = max(0, current_levels['magenta'] - (job_costs['color_cartridge_percent'] * copies_factor))
-                new_yellow = max(0, current_levels['yellow'] - (job_costs['color_cartridge_percent'] * copies_factor))
-                new_black = max(0, current_levels['black'] - (job_costs['black_cartridge_percent'] * copies_factor))
+                color_cost = job_costs['color_cartridge_percent'] * copies_factor
+                new_cyan = estimated_level_after(current_levels['cyan'], color_cost)
+                new_magenta = estimated_level_after(current_levels['magenta'], color_cost)
+                new_yellow = estimated_level_after(current_levels['yellow'], color_cost)
+                new_black = estimated_level_after(
+                    current_levels['black'], job_costs['black_cartridge_percent'] * copies_factor)
 
             print("DEBUG: New levels calculated:")
             print(f"  Cyan: {current_levels['cyan']:.1f}% -> {new_cyan:.1f}%")

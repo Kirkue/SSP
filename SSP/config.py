@@ -197,6 +197,46 @@ class Config:
         """Get minimum pixel count threshold for color detection."""
         return self.get('PIXEL_COUNT_THRESHOLD', int)
 
+    # Supplies
+
+    @property
+    def low_paper_alert_sheets(self) -> int:
+        """Sheets left at or below which the operator gets a low-paper SMS (default 10).
+        The one place this threshold lives; the kiosk still stops taking customers at 3."""
+        try:
+            return max(0, self.get('LOW_PAPER_ALERT_SHEETS', int))
+        except KeyError:
+            return 10
+
+    @property
+    def ink_low_alert_percent(self) -> float:
+        """Estimated tank level (%) at or below which the operator gets a low-ink SMS (default 20).
+        Low ink never stops the kiosk by itself; only an admin marking a tank empty does."""
+        try:
+            return self.get('INK_LOW_ALERT_PERCENT', float)
+        except KeyError:
+            return 20.0
+
+    # Bottle yields (pages at the standard 5% coverage) the ink estimate is scaled by. 17000 is
+    # a placeholder for both until the HP Smart Tank 660-670's spec sheet figures are filled in:
+    # too high a yield makes the estimate drain too slowly (docs/remaining-work.md 2.5).
+
+    @property
+    def ink_yield_black_pages(self) -> int:
+        """Pages one black bottle prints at standard coverage."""
+        try:
+            return max(1, self.get('INK_YIELD_BLACK_PAGES', int))
+        except KeyError:
+            return 17000
+
+    @property
+    def ink_yield_color_pages(self) -> int:
+        """Pages one colour bottle prints at standard coverage."""
+        try:
+            return max(1, self.get('INK_YIELD_COLOR_PAGES', int))
+        except KeyError:
+            return 17000
+
     # SMS / hardware settings
 
     @property

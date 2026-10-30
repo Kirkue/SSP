@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator
 
+from config import get_config
 from ui.theme import COLORS, FONT, GROUPBOX_QSS, INPUT_QSS, RADIUS, severity_color
 from ui.widgets import BackButton, CodeKeypad, Header, PrimaryButton, SecondaryButton, nav_row
 
@@ -208,7 +209,7 @@ class AdminScreenView(QWidget):
         return col, field
 
     def _create_cmyk_management_group(self):
-        group = QGroupBox("CMYK Ink Levels (Estimated)")
+        group = QGroupBox("Ink Tanks: enter what you see (0% = empty, stops the kiosk)")
         group.setStyleSheet(GROUPBOX_QSS)
         layout = QVBoxLayout(group)
         layout.setSpacing(10)
@@ -250,10 +251,13 @@ class AdminScreenView(QWidget):
         update_cmyk_btn.clicked.connect(self._update_cmyk_levels)
         button_row.addWidget(update_cmyk_btn)
 
-        reset_cmyk_btn = PrimaryButton("Refill All")
-        reset_cmyk_btn.setMinimumHeight(44)
-        reset_cmyk_btn.clicked.connect(self.reset_cmyk_clicked.emit)
-        button_row.addWidget(reset_cmyk_btn)
+        # Tanks are topped up from bottles and are rarely exactly full, so a real refill is
+        # recorded by entering the level; "Refill All" (100%) is only a SIM_MODE convenience.
+        if get_config().sim_mode:
+            reset_cmyk_btn = PrimaryButton("Refill All")
+            reset_cmyk_btn.setMinimumHeight(44)
+            reset_cmyk_btn.clicked.connect(self.reset_cmyk_clicked.emit)
+            button_row.addWidget(reset_cmyk_btn)
 
         refresh_cmyk_btn = SecondaryButton("Refresh")
         refresh_cmyk_btn.setMinimumHeight(44)
