@@ -82,12 +82,12 @@ class TestAlertedSetting:
 
 
 class TestBottleYieldsFromConfig:
-    def test_defaults_match_the_old_hardcoded_value(self, monkeypatch):
+    def test_defaults_are_the_hp_data_sheet_yields(self, monkeypatch):
         from config import get_config
         monkeypatch.delenv('INK_YIELD_BLACK_PAGES', raising=False)
         monkeypatch.delenv('INK_YIELD_COLOR_PAGES', raising=False)
-        assert get_config().ink_yield_black_pages == 17000
-        assert get_config().ink_yield_color_pages == 17000
+        assert get_config().ink_yield_black_pages == 6200
+        assert get_config().ink_yield_color_pages == 9100
 
     def test_a_smaller_yield_drains_the_estimate_faster(self, monkeypatch):
         mgr = InkAnalysisManager()

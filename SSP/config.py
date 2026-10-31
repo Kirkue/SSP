@@ -235,9 +235,10 @@ class Config:
         except KeyError:
             return 20.0
 
-    # Bottle yields (pages at the standard 5% coverage) the ink estimate is scaled by. 17000 is
-    # a placeholder for both until the HP Smart Tank 660-670's spec sheet figures are filled in:
-    # too high a yield makes the estimate drain too slowly (docs/remaining-work.md 2.5).
+    # Bottle yields (pages at the standard 5% coverage) the ink estimate is scaled by. Defaults are
+    # HP's data sheet figures for the Smart Tank 670 (GT53XL black ~6,200 pages, GT52 colour
+    # ~9,100 pages per bottle, ISO/IEC 24712 pages). A too-high yield makes the estimate drain
+    # too slowly (docs/remaining-work.md 2.5).
 
     @property
     def ink_yield_black_pages(self) -> int:
@@ -245,7 +246,7 @@ class Config:
         try:
             return max(1, self.get('INK_YIELD_BLACK_PAGES', int))
         except KeyError:
-            return 17000
+            return 6200
 
     @property
     def ink_yield_color_pages(self) -> int:
@@ -253,7 +254,7 @@ class Config:
         try:
             return max(1, self.get('INK_YIELD_COLOR_PAGES', int))
         except KeyError:
-            return 17000
+            return 9100
 
     # SMS / hardware settings
 
