@@ -142,12 +142,18 @@ def build(path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("output", nargs="?", default="intake_sheet.pdf")
-    parser.add_argument("--print", action="store_true", help="send the PDF to the default printer with lp")
+    parser.add_argument("--print", action="store_true",
+                        help="send the PDF to the kiosk's printer (PRINTER_NAME) with lp")
     args = parser.parse_args(argv)
 
     build(args.output)
     if args.print:
-        subprocess.run(["lp", args.output], check=True)
+        # The kiosk has no CUPS default printer; name the queue, as print jobs do.
+        printer = get_config().printer_name
+        result = subprocess.run(["lp", "-d", printer, args.output])
+        if result.returncode != 0:
+            sys.exit(f"Printing to '{printer}' failed; the PDF is saved at {args.output}.")
+        print(f"Sent to printer '{printer}'")
 
 
 if __name__ == "__main__":
