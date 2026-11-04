@@ -31,3 +31,5 @@ SSP/database/*.db
 
 # Reference renders from `make screenshots`
 screenshots/
+# Printed how-to sheet from scripts/make_intake_sheet.py
+intake_sheet.pdf

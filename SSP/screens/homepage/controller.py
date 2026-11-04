@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QGridLayout, QDialog
 
+from config import get_config
 from managers.timeout_manager import TimeoutPolicy
 from screens.dialogs.pin_dialog import PinDialogController as PinDialog
 from .model import HomepageModel
@@ -22,6 +23,19 @@ class HomepageController(QWidget):
         layout.addWidget(self.view, 0, 0)
 
         self._connect_signals()
+        self._show_intake_details()
+
+    def _show_intake_details(self):
+        """Name the kiosk's real Wi-Fi network and email address on the cards,
+        the same values the Wi-Fi/email screens and the printed sheet use."""
+        config = get_config()
+        if config.wifi_hotspot_enabled and not config.sim_mode:
+            wifi = f'Connect to the network:\n"{config.wifi_hotspot_ssid}"'
+        else:
+            wifi = "Upload from your phone over the local network."
+        address = config.email_user
+        email = f"Email address:\n{address}" if address else "Email your PDF to the kiosk."
+        self.view.set_intake_details(wifi, email)
 
     def _connect_signals(self):
         """Connect signals from the view to the model and vice-versa."""

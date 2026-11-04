@@ -81,8 +81,9 @@ class HomepageScreenView(QWidget):
 
         # Cards: 2x2 grid.
         self.usb_card = Card('usb', "USB", "Upload files via USB.", icon_name='usb')
-        self.wifi_card = Card('wifi', "WiFi", 'Connect to the local network:\n"usc_printer_kiosk"', icon_name='wifi')
-        self.email_card = Card('email', "Email", "Email address:\nprinter_kiosk@usc.edu.ph", icon_name='email')
+        # Descriptions naming the network and address come from set_intake_details().
+        self.wifi_card = Card('wifi', "WiFi", "Upload from your phone over Wi-Fi.", icon_name='wifi')
+        self.email_card = Card('email', "Email", "Email your PDF to the kiosk.", icon_name='email')
         self.scanner_card = Card(
             'scanner', "Scanner", "Scan documents via the printer's built-in scanner.", icon_name='scanner'
         )
@@ -114,6 +115,10 @@ class HomepageScreenView(QWidget):
         fg_layout.addSpacing(12)
         fg_layout.addLayout(voucher_row)
         fg_layout.addStretch(2)
+
+    def set_intake_details(self, wifi_text, email_text):
+        self.wifi_card.set_description(wifi_text)
+        self.email_card.set_description(email_text)
 
     def set_change_low(self, low):
         self.low_change_banner.set_low(low)
