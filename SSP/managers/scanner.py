@@ -12,7 +12,13 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from abc import ABC, abstractmethod
+
+# After a scan the scanner stays "Device busy" for ~2.6 s (measured on the kiosk), so a
+# scan started straight after another (the next page) retries for up to this long.
+BUSY_RETRY_SECONDS = 10
+BUSY_RETRY_INTERVAL = 1
 
 
 class ScannerError(Exception):
@@ -21,8 +27,9 @@ class ScannerError(Exception):
 
 class ScannerInterface(ABC):
     @abstractmethod
-    def scan_page(self, dpi: int) -> str:
-        """Scan one page and return the path to a fresh single-page PNG."""
+    def scan_page(self, dpi: int, colour: bool = False) -> str:
+        """Scan one page and return the path to a fresh single-page image (a JPEG on the
+        real scanner). Greyscale unless `colour`, which takes about twice as long."""
 
     @abstractmethod
     def is_available(self) -> bool:
@@ -53,39 +60,49 @@ class SaneAirscanScanner(ScannerInterface):
         except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
             return False
 
-    def scan_page(self, dpi: int) -> str:
+    def scan_page(self, dpi: int, colour: bool = False) -> str:
         if not self.device:
             raise ScannerError(
                 "No scanner device configured — set SCANNER_DEVICE in .env "
                 "(run `scanimage -L` on the kiosk to find it)."
             )
 
-        fd, output_path = tempfile.mkstemp(suffix=".png", prefix="scan-page-")
+        # Gray + JPEG measured ~9 s a page against ~20 s for Color + PNG (docs/remaining-work.md 2.3).
+        fd, output_path = tempfile.mkstemp(suffix=".jpg", prefix="scan-page-")
         os.close(fd)
 
         command = [
             "scanimage",
             "-d", self.device,
-            "--format=png",
-            "--mode=Color",
+            "--format=jpeg",
+            f"--mode={'Color' if colour else 'Gray'}",
             "--resolution", str(dpi),
         ]
-        try:
-            with open(output_path, "wb") as out_file:
-                subprocess.run(
-                    command, stdout=out_file, stderr=subprocess.PIPE,
-                    timeout=self.timeout, check=True,
-                )
-        except FileNotFoundError:
-            self._cleanup(output_path)
-            raise ScannerError("'scanimage' is not installed — is sane-airscan set up on this kiosk?")
-        except subprocess.TimeoutExpired:
-            self._cleanup(output_path)
-            raise ScannerError(f"Scan timed out after {self.timeout}s — check the scanner connection.")
-        except subprocess.CalledProcessError as e:
-            self._cleanup(output_path)
-            stderr = (e.stderr or b"").decode(errors="replace").strip()
-            raise ScannerError(f"scanimage failed: {stderr or 'unknown error'}")
+        busy_deadline = time.monotonic() + BUSY_RETRY_SECONDS
+        while True:
+            try:
+                with open(output_path, "wb") as out_file:
+                    subprocess.run(
+                        command, stdout=out_file, stderr=subprocess.PIPE,
+                        timeout=self.timeout, check=True,
+                    )
+                break
+            except FileNotFoundError:
+                self._cleanup(output_path)
+                raise ScannerError("'scanimage' is not installed — is sane-airscan set up on this kiosk?")
+            except subprocess.TimeoutExpired:
+                self._cleanup(output_path)
+                raise ScannerError(f"Scan timed out after {self.timeout}s — check the scanner connection.")
+            except subprocess.CalledProcessError as e:
+                stderr = (e.stderr or b"").decode(errors="replace").strip()
+                if "busy" in stderr.lower():
+                    if time.monotonic() < busy_deadline:
+                        time.sleep(BUSY_RETRY_INTERVAL)
+                        continue
+                    self._cleanup(output_path)
+                    raise ScannerError("The scanner is busy. Please wait a moment and try again.")
+                self._cleanup(output_path)
+                raise ScannerError(f"scanimage failed: {stderr or 'unknown error'}")
 
         if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
             self._cleanup(output_path)
@@ -138,7 +155,7 @@ class SimScanner(ScannerInterface):
             doc.close()
         print(f"📄 Seeded {self.page_count} sample page(s) into SIM_SCANNER_DIR: {self.sim_dir}")
 
-    def scan_page(self, dpi: int) -> str:
+    def scan_page(self, dpi: int, colour: bool = False) -> str:
         canned = sorted(f for f in os.listdir(self.sim_dir) if f.lower().endswith('.png'))
         if not canned:
             raise ScannerError(f"No canned pages found in {self.sim_dir}")

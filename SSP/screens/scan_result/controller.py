@@ -1,8 +1,8 @@
 # screens/scan_result/controller.py
 
 from PyQt5.QtWidgets import QWidget, QGridLayout
-from PyQt5.QtCore import QTimer
 
+from managers.timeout_manager import TimeoutPolicy
 from managers.webapp_thread import scan_redeem_portal_url
 
 from .model import ScanResultModel
@@ -19,16 +19,11 @@ class ScanResultController(QWidget):
         self.model = ScanResultModel()
         self.view = ScanResultScreenView()
 
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.view, 0, 0)
 
         self.view.done_clicked.connect(self._handle_done)
-        self.view.done_clicked.connect(self._reset_timeout)
 
     # --- Public API for main_app ---
 
@@ -53,21 +48,16 @@ class ScanResultController(QWidget):
             self.view.set_portal_hint(scan_redeem_portal_url(tls=tls))
         except Exception as e:
             print(f"Could not resolve scan redeem portal URL: {e}")
-        self.timeout_timer.start(60000)
 
     def on_leave(self):
         print("Scan result screen leaving")
-        self.timeout_timer.stop()
+
+    def timeout_policy(self):
+        # The customer has paid; this screen carries on by itself after 60 s whatever they
+        # tap, so the countdown is fixed and there is nothing to warn about.
+        return TimeoutPolicy(seconds=60, action=self._on_timeout, warn=False, taps_reset=False)
 
     def _on_timeout(self):
         print("⏰ Scan result screen timeout")
         # The print is paid for: carry on to it rather than abandoning it.
         self._handle_done()
-
-    def _reset_timeout(self):
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(60)

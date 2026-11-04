@@ -115,7 +115,6 @@ class HomepageScreenView(QWidget):
         fg_layout.addLayout(voucher_row)
         fg_layout.addStretch(2)
 
-
     def set_change_low(self, low):
         self.low_change_banner.set_low(low)
 

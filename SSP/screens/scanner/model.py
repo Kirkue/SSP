@@ -8,6 +8,7 @@
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
+from config import get_config
 from managers.scanner_manager import ScannerManager
 from managers.scanner_thread import ScannerThread
 
@@ -27,6 +28,21 @@ class ScannerModel(QObject):
 
     def start_session(self):
         self.manager.start_session()
+        self.manager.colour = get_config().scanner_colour_default
+
+    @property
+    def colour(self) -> bool:
+        return self.manager.colour
+
+    def set_colour(self, colour: bool):
+        self.manager.colour = bool(colour)
+
+    def expected_scan_seconds(self) -> float:
+        return self.manager.expected_scan_seconds()
+
+    def is_busy(self) -> bool:
+        """True while a scan (or building the PDF) is running; the screen can't time out then."""
+        return self.thread is not None and self.thread.isRunning()
 
     def page_count(self) -> int:
         return self.manager.page_count()

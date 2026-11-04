@@ -4,8 +4,8 @@ import os
 import shutil
 
 from PyQt5.QtWidgets import QWidget, QGridLayout
-from PyQt5.QtCore import QTimer
 
+from managers.timeout_manager import TimeoutPolicy
 from .model import ScanDestinationModel
 from .thumbnail_thread import ThumbnailRenderThread
 from .view import PAGE_RENDER_HEIGHT, ScanDestinationScreenView
@@ -22,10 +22,6 @@ class ScanDestinationController(QWidget):
         self.view = ScanDestinationScreenView()
         self.thumbnail_thread = None
 
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.view, 0, 0)
@@ -34,12 +30,8 @@ class ScanDestinationController(QWidget):
 
     def _connect_signals(self):
         self.view.cancel_clicked.connect(self._handle_cancel)
-        self.view.cancel_clicked.connect(self._reset_timeout)
 
         self.view.continue_clicked.connect(self._handle_continue)
-        self.view.continue_clicked.connect(self._reset_timeout)
-
-        self.view.destination_toggled.connect(lambda *_: self._reset_timeout())
 
     # --- Public API for main_app ---
 
@@ -102,22 +94,15 @@ class ScanDestinationController(QWidget):
         self.view.set_busy(False)
         self.view.set_print_available(not self.main_app.print_supplies_low())
         self.view.set_digital_fee(self.model.get_digital_fee())
-        self.timeout_timer.start(60000)
 
     def on_leave(self):
         print("Scan destination screen leaving")
-        self.timeout_timer.stop()
         self._stop_thumbnail_render()
+
+    def timeout_policy(self):
+        return TimeoutPolicy(seconds=60, action=self._on_timeout)
 
     def _on_timeout(self):
         print("⏰ Scan destination screen timeout - returning to homepage")
         self._cleanup_pdf()
         self.main_app.show_screen('homepage')
-
-    def _reset_timeout(self):
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(60)

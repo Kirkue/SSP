@@ -1,8 +1,8 @@
 # screens/print_options/controller.py
 
 from PyQt5.QtWidgets import QWidget, QMessageBox
-from PyQt5.QtCore import QTimer
 
+from managers.timeout_manager import TimeoutPolicy
 from .model import PrintOptionsModel
 from .view import PrintOptionsScreenView
 
@@ -18,11 +18,6 @@ class PrintOptionsController(QWidget):
         self.view = PrintOptionsScreenView()
         self.source = None      # usb, wifi, email, scanner
 
-        # Setup timeout timer (1 minute = 60000ms)
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         # Set the view's layout as this controller's layout
         self.setLayout(self.view.main_layout)
 
@@ -32,19 +27,12 @@ class PrintOptionsController(QWidget):
         """Connect signals from the view to the model and vice-versa."""
         # --- View -> Controller ---
         self.view.back_button_clicked.connect(self._go_back)
+        self.view.voucher_balance_clicked.connect(self.main_app.open_voucher_balance)
         self.view.continue_button_clicked.connect(self._continue_to_payment)
         self.view.bw_mode_clicked.connect(self._set_bw_mode)
         self.view.color_mode_clicked.connect(self._set_color_mode)
         self.view.copies_decreased.connect(self._decrease_copies)
         self.view.copies_increased.connect(self._increase_copies)
-
-        # Reset timeout on user interaction
-        self.view.back_button_clicked.connect(self._reset_timeout)
-        self.view.continue_button_clicked.connect(self._reset_timeout)
-        self.view.bw_mode_clicked.connect(self._reset_timeout)
-        self.view.color_mode_clicked.connect(self._reset_timeout)
-        self.view.copies_decreased.connect(self._reset_timeout)
-        self.view.copies_increased.connect(self._reset_timeout)
 
         # --- Model -> View ---
         self.model.cost_updated.connect(self.view.update_cost_display)
@@ -231,28 +219,16 @@ class PrintOptionsController(QWidget):
         # Check paper availability immediately when entering screen
         QTimer.singleShot(200, self._check_paper_availability)
 
-        # Start timeout timer (1 minute)
-        self.timeout_timer.start(60000)
-        print("⏰ Print options screen timeout started (1 minute)")
-
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("Print options screen leaving")
         self.model.stop_analysis()
-        # Stop timeout timer
-        self.timeout_timer.stop()
+
+    def timeout_policy(self):
+        return TimeoutPolicy(seconds=60, action=self._on_timeout)
 
     def _on_timeout(self):
-        """Handle timeout - return to idle screen."""
-        print("⏰ Print options screen timeout - returning to idle screen")
-        self.main_app.show_screen('idle')
-
-    def _reset_timeout(self):
-        """Reset the timeout timer (call on user activity)."""
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        print("⏰ Print options screen timeout reset")
-        if hasattr(self.main_app, "start_global_countdown"):
-            self.main_app.start_global_countdown(60)
+        """The customer walked away mid-flow: back to the homepage, files cleared."""
+        print("⏰ Print options screen timeout - returning to homepage")
+        self.main_app.end_session()
+        self.main_app.show_screen('homepage')

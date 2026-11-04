@@ -1,28 +1,32 @@
 """
-"Check voucher balance" from the homepage, driven through the real
-HomepageController and VoucherBalanceController (offscreen Qt) against a temp
-SQLite DB, with Vouchers issued by the real VoucherManager.issue() path.
+"Check voucher balance" popup, opened from the homepage and driven through the real
+HomepageController and VoucherBalanceController (offscreen Qt) against a temp SQLite DB,
+with Vouchers issued by the real VoucherManager.issue() path.
 
-Only main_app is faked: a real QStackedWidget plus show_screen()'s
-leave/enter lifecycle and the global countdown label.
+Only main_app is faked: a real QStackedWidget plus show_screen()'s leave/enter lifecycle
+(which closes the popup), the timeout manager on a fake clock, and the session's
+remembered Vouchers.
 """
 import locale
 import os
 import sqlite3
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PyQt5.QtWidgets import QApplication, QStackedWidget  # noqa: E402
+from PyQt5.QtWidgets import QApplication, QStackedWidget, QWidget  # noqa: E402
 
 import managers.voucher_manager as vm  # noqa: E402
 import screens.voucher_balance.model as balance_module  # noqa: E402
 from database.db_manager import DatabaseManager  # noqa: E402
 from database.models import init_db  # noqa: E402
-from managers.voucher_manager import MSG_FULLY_USED, MSG_UNKNOWN, VoucherManager  # noqa: E402
+from managers.session_vouchers import SessionVouchers  # noqa: E402
+from managers.timeout_manager import TimeoutManager  # noqa: E402
+from managers.voucher_manager import MSG_FULLY_USED, MSG_UNKNOWN, VoucherManager, normalize_code  # noqa: E402
 from screens.homepage.controller import HomepageController  # noqa: E402
-from screens.voucher_balance.controller import TIMEOUT_MS, VoucherBalanceController  # noqa: E402
+from screens.voucher_balance.controller import VoucherBalanceController  # noqa: E402
 from screens.voucher_balance.model import MSG_EMPTY, PESO  # noqa: E402
 
 
@@ -38,35 +42,47 @@ class Clock:
 
 
 class FakeMainApp:
-    """Just enough of PrintingSystemApp: a real stack and show_screen()'s lifecycle."""
+    """Just enough of PrintingSystemApp: a real stack, show_screen()'s lifecycle (which
+    closes the popup and clears the remembered Vouchers at idle), and the popup itself."""
 
     def __init__(self):
-        self.stacked_widget = QStackedWidget()
+        self.window = QWidget()
+        self.window.resize(1000, 800)
+        self.stacked_widget = QStackedWidget(self.window)
         self.screens = []
-        self.countdown = None
+        self.timeclock = SimpleNamespace(now=1000.0)
+        self.timeouts = TimeoutManager(clock=lambda: self.timeclock.now)
+        self.timeouts.expired.connect(lambda name, action: action() if action else None)
+        self.session_vouchers = SessionVouchers()
         self.homepage_screen = HomepageController(self)
-        self.voucher_balance_screen = VoucherBalanceController(self)
-        self._by_name = {
-            'homepage': self.homepage_screen,
-            'voucher_balance': self.voucher_balance_screen,
-        }
+        self._by_name = {'homepage': self.homepage_screen}
         for widget in self._by_name.values():
             self.stacked_widget.addWidget(widget)
+        self.voucher_balance = VoucherBalanceController(self, parent_widget=self.window)
+
+    def open_voucher_balance(self):
+        self.voucher_balance.open()
 
     def show_screen(self, name):
+        self.voucher_balance.close()
         current = self.stacked_widget.currentWidget()
         if self.screens and current is not None:
             current.on_leave()
         self.screens.append(name)
+        if name == 'idle':
+            self.session_vouchers.clear()
         widget = self._by_name.get(name)
         if widget is None:
+            self.timeouts.enter(name, None)
             return  # idle/usb/...: not part of these tests
         self.stacked_widget.setCurrentWidget(widget)
-        self.countdown = 60
+        make_policy = getattr(widget, 'timeout_policy', None)
+        self.timeouts.enter(name, make_policy() if make_policy else None)
         widget.on_enter()
 
-    def start_global_countdown(self, seconds=60):
-        self.countdown = seconds
+    def advance_time(self, seconds):
+        self.timeclock.now += seconds
+        self.timeouts.poll()
 
 
 @pytest.fixture(scope='module')
@@ -109,17 +125,20 @@ def kiosk(qapp, db, clock, monkeypatch):
     monkeypatch.setattr(balance_module, 'DatabaseManager', lambda *a, **k: db)
     main_app = FakeMainApp()
     # The model builds its own VoucherManager(DatabaseManager()); only its clock is swapped.
-    main_app.voucher_balance_screen.model.voucher_manager._now = clock
+    main_app.voucher_balance.model.voucher_manager._now = clock
     main_app.show_screen('homepage')
+    main_app.window.show()
     yield main_app
+    main_app.voucher_balance.close()
     main_app.homepage_screen.on_leave()
-    main_app.voucher_balance_screen.on_leave()
+    main_app.timeouts._timer.stop()
+    main_app.window.close()
 
 
 def open_balance_check(main_app):
     main_app.homepage_screen.view.voucher_balance_button.click()
-    assert main_app.screens[-1] == 'voucher_balance'
-    return main_app.voucher_balance_screen
+    assert main_app.voucher_balance.is_open
+    return main_app.voucher_balance
 
 
 def check(screen, code):
@@ -152,39 +171,123 @@ def application_count(db_path):
         conn.close()
 
 
-class TestNavigation:
-    def test_reachable_from_homepage_without_starting_a_print_job(self, kiosk):
+class TestPopup:
+    def test_opens_over_the_homepage_without_leaving_it(self, kiosk):
         open_balance_check(kiosk)
-        assert kiosk.screens == ['homepage', 'voucher_balance']
+        assert kiosk.screens == ['homepage']       # no screen change, nothing started
+        assert kiosk.stacked_widget.currentWidget() is kiosk.homepage_screen
 
-    def test_back_returns_to_homepage(self, kiosk):
+    def test_covers_the_whole_window_so_nothing_underneath_can_be_tapped(self, kiosk):
         screen = open_balance_check(kiosk)
-        screen.view.back_button.click()
-        assert kiosk.screens[-1] == 'homepage'
+        assert screen.view.geometry() == kiosk.window.rect()
 
-    def test_inactivity_returns_to_homepage(self, kiosk):
+    def test_close_button_closes_it_and_stays_on_the_homepage(self, kiosk):
         screen = open_balance_check(kiosk)
-        assert screen.timeout_timer.isActive()
-        assert screen.timeout_timer.interval() == TIMEOUT_MS == 60000
-        screen.timeout_timer.timeout.emit()
-        assert kiosk.screens[-1] == 'homepage'
+        screen.view.close_button.click()
+        assert not screen.is_open
+        assert kiosk.screens == ['homepage']
 
-    def test_checking_a_code_restarts_the_countdown(self, kiosk, issue):
-        v = issue(7)
-        screen = open_balance_check(kiosk)
-        kiosk.countdown = 5
-        check(screen, v.display_code)
-        assert kiosk.countdown == 60
-        assert screen.timeout_timer.isActive()
-
-    def test_leaving_wipes_the_result(self, kiosk, issue):
+    def test_closing_wipes_the_result(self, kiosk, issue):
         v = issue(7)
         screen = open_balance_check(kiosk)
         check(screen, v.display_code)
-        screen.view.back_button.click()
+        screen.view.close_button.click()
         assert screen.view.amount_label.text() == ""
         assert screen.view.result_panel.isHidden()
         assert screen.model.remaining == 0
+
+    def test_reopening_starts_empty(self, kiosk, issue):
+        v = issue(7)
+        screen = open_balance_check(kiosk)
+        check(screen, v.display_code)
+        screen.view.close_button.click()
+        screen = open_balance_check(kiosk)
+        assert screen.view.result_panel.isHidden() and screen.view.code_input.text() == ""
+
+    def test_any_screen_change_closes_it(self, kiosk, issue):
+        v = issue(7)
+        screen = open_balance_check(kiosk)
+        check(screen, v.display_code)
+        kiosk.show_screen('idle')
+        assert not screen.is_open
+        assert screen.view.amount_label.text() == ""
+
+    def test_it_cannot_be_left_open_behind_a_timeout(self, kiosk):
+        """The screen underneath times out as normal; that navigation closes the popup."""
+        screen = open_balance_check(kiosk)
+        kiosk.advance_time(60)
+        assert kiosk.screens[-1] == 'idle'
+        assert not screen.is_open
+
+    def test_the_reader_hint_tells_customers_they_can_scan(self, kiosk):
+        from ui.widgets import READER_HINT
+        screen = open_balance_check(kiosk)
+        assert screen.view.reader_hint.text() == READER_HINT
+        assert "QR" in READER_HINT
+
+
+class TestRememberedVouchers:
+    """A Voucher that checks out is kept for the session so payment can offer it."""
+
+    def test_a_found_voucher_is_remembered(self, kiosk, issue):
+        v = issue(7)
+        screen = open_balance_check(kiosk)
+        check(screen, v.display_code)
+        [remembered] = kiosk.session_vouchers.items()
+        assert remembered.code == normalize_code(v.code)
+        assert remembered.remaining == 7
+        assert remembered.expires_at.year == 2026
+
+    def test_the_popup_says_it_was_saved(self, kiosk, issue):
+        v = issue(7)
+        screen = open_balance_check(kiosk)
+        check(screen, v.display_code)
+        assert "Saved for this session" in screen.view.saved_note.text()
+
+    def test_the_qr_form_is_remembered_too(self, kiosk, issue):
+        v = issue(7)
+        open_balance_check(kiosk).check_voucher_code(f"V1:{v.code}")
+        assert [r.code for r in kiosk.session_vouchers.items()] == [v.code]
+
+    def test_failed_checks_are_not_remembered(self, kiosk, issue, db, clock):
+        used = issue(4)
+        VoucherManager(db, now_fn=clock).apply([used.code], 4)
+        screen = open_balance_check(kiosk)
+        check(screen, used.display_code)
+        check(screen, "ZZZZ-ZZZZ")
+        check(screen, "  ")
+        assert kiosk.session_vouchers.items() == []
+
+    def test_several_are_kept_in_the_order_checked(self, kiosk, issue):
+        a, b = issue(5), issue(9)
+        screen = open_balance_check(kiosk)
+        check(screen, a.display_code)
+        check(screen, b.display_code)
+        assert [r.remaining for r in kiosk.session_vouchers.items()] == [5, 9]
+
+    def test_checking_again_refreshes_the_balance(self, kiosk, issue, db, clock):
+        v = issue(10)
+        screen = open_balance_check(kiosk)
+        check(screen, v.display_code)
+        VoucherManager(db, now_fn=clock).apply([v.code], 4)
+        check(screen, v.display_code)
+        assert [r.remaining for r in kiosk.session_vouchers.items()] == [6]
+
+    def test_they_survive_closing_the_popup_but_not_going_back_to_idle(self, kiosk, issue):
+        v = issue(7)
+        screen = open_balance_check(kiosk)
+        check(screen, v.display_code)
+        screen.view.close_button.click()
+        assert len(kiosk.session_vouchers) == 1
+        kiosk.show_screen('idle')
+        assert len(kiosk.session_vouchers) == 0
+
+    def test_they_are_never_applied_by_checking(self, kiosk, issue, db_path):
+        v = issue(7)
+        before = voucher_row(db_path, v.voucher_id)
+        check(open_balance_check(kiosk), v.display_code)
+        assert voucher_row(db_path, v.voucher_id) == before
+        assert application_count(db_path) == 0
 
 
 class TestBalance:
@@ -213,12 +316,10 @@ class TestBalance:
         screen = open_balance_check(kiosk)
         keys = screen.view.keypad.key_buttons
         assert set(keys) == set(vm.CODE_ALPHABET) | {BACKSPACE_KEY}
-        kiosk.countdown = 5
         keys["Z"].click()
         keys[BACKSPACE_KEY].click()
         for ch in v.code:
             keys[ch].click()
-        assert kiosk.countdown == 60  # each key press keeps the screen awake
         screen.view.check_button.click()
         assert not screen.view.result_panel.isHidden()
         assert screen.view.amount_label.text() == f"{PESO}7"
@@ -227,12 +328,10 @@ class TestBalance:
         v = issue(7)
         assert check(open_balance_check(kiosk), f"V1:{v.code}")['found']
 
-    def test_qr_read_is_checked_and_keeps_the_screen_awake(self, kiosk, issue):
+    def test_qr_read_is_checked(self, kiosk, issue):
         v = issue(7)
         screen = open_balance_check(kiosk)
-        kiosk.countdown = 5
         screen.check_voucher_code(f"V1:{v.code}")  # what main_app hands a Voucher read
-        assert kiosk.countdown == 60
         assert not screen.view.result_panel.isHidden()
         assert screen.view.amount_label.text() == f"{PESO}7"
 

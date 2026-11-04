@@ -91,6 +91,39 @@ class TestWaitForPrintCompletion:
         assert thread.failures == [f"No paper detected on {PRINTER}"]
 
 
+class TestPaperEmptySignal:
+    """The printer reporting its tray empty also tells the app, so it can zero the
+    paper counter (2.5). It fires just before print_failed, and only for paper-out."""
+
+    @pytest.fixture
+    def events(self, thread):
+        log = []
+        thread.paper_empty.connect(lambda: log.append("paper_empty"))
+        thread.print_failed.connect(lambda msg: log.append("print_failed"))
+        return log
+
+    @pytest.mark.parametrize("alerts", ["media-empty-error", "media-needed-error",
+                                        "cups-waiting-for-job-completed media-empty-error media-needed-error"])
+    def test_paper_out_alerts_signal_before_failing(self, thread, events, monkeypatch, alerts):
+        monkeypatch.setattr(pt.subprocess, 'run', FakeCups(alerts=alerts, queued_polls=999).run)
+
+        assert thread.wait_for_print_completion(JOB) is False
+        assert events == ["paper_empty", "print_failed"]
+
+    def test_media_empty_report_also_signals(self, thread, events, monkeypatch):
+        monkeypatch.setattr(pt.subprocess, 'run', FakeCups(alerts="media-empty-report", queued_polls=999).run)
+
+        assert thread.wait_for_print_completion(JOB) is False
+        assert events == ["paper_empty", "print_failed"]
+
+    @pytest.mark.parametrize("alerts", ["media-jam-error", "paused", "offline"])
+    def test_other_failures_do_not_signal(self, thread, events, monkeypatch, alerts):
+        monkeypatch.setattr(pt.subprocess, 'run', FakeCups(alerts=alerts, queued_polls=999).run)
+
+        assert thread.wait_for_print_completion(JOB) is False
+        assert events == ["print_failed"]
+
+
 def test_thank_you_screen_explains_a_paused_printer(monkeypatch):
     QApplication.instance() or QApplication([])
     import utils.error_logger
@@ -105,6 +138,27 @@ def test_thank_you_screen_explains_a_paused_printer(monkeypatch):
 
     assert model.current_state == "error"
     assert "The printer is paused." in shown[-1][1]
+
+
+@pytest.mark.parametrize("count, title, text", [
+    (0, "NO PAPER AVAILABLE", "out of paper"),
+    (1, "LOW PAPER WARNING", "Only 1 page remaining"),
+    (3, "LOW PAPER WARNING", "Only 3 pages remaining"),
+])
+def test_thank_you_screen_tells_the_admin_how_to_reopen_the_kiosk(count, title, text):
+    QApplication.instance() or QApplication([])
+    from screens.thank_you.model import ThankYouModel
+
+    model = ThankYouModel()
+    shown = []
+    model.status_updated.connect(lambda t, b: shown.append((t, b)))
+
+    model.show_no_paper_error(count)
+
+    assert shown[-1][0] == title
+    assert text in shown[-1][1]
+    assert "Admin: after loading paper" in shown[-1][1]
+    assert "Refill" in shown[-1][1]
 
 
 def test_disabled_queue_is_not_available(monkeypatch):

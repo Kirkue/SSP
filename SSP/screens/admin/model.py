@@ -1,6 +1,7 @@
 # screens/admin/model.py
 
 from PyQt5.QtCore import QObject, pyqtSignal
+from config import get_config
 from database.db_manager import DatabaseManager
 from managers.digital_fee import get_digital_fee, set_digital_fee
 from managers.sms_manager import get_sms_manager
@@ -131,7 +132,8 @@ class AdminModel(QObject):
 
     def check_low_paper_alert(self):
         """Checks for low paper and sends an SMS alert if needed."""
-        if self.paper_count <= 10 and not self.sms_alert_sent:
+        threshold = get_config().low_paper_alert_sheets
+        if self.paper_count <= threshold and not self.sms_alert_sent:
             print(f"Low paper detected: {self.paper_count} sheets remaining. Sending alert.")
             message = f"ALERT: Paper is low ({self.paper_count} sheets left). Please refill soon."
 
@@ -142,8 +144,18 @@ class AdminModel(QObject):
             else:
                 print("Failed to send low paper SMS.")
 
-        elif self.paper_count > 10:
+        elif self.paper_count > threshold:
             self.sms_alert_sent = False
+
+    def mark_paper_empty(self):
+        """The printer itself reported the tray empty, so the count is wrong: set it to 0
+        and the kiosk stops taking customers until an admin records a refill. The
+        printer thread already sent its own out-of-paper SMS, so no low-paper one follows."""
+        self.paper_count = 0
+        self.db_manager.update_setting('paper_count', 0)
+        self.sms_alert_sent = True
+        print("Printer reported no paper: paper count set to 0.")
+        self.load_paper_count()
 
     def load_coin_counts(self):
         """Loads the coin counts from the database and emits a signal."""

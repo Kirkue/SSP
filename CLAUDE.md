@@ -37,6 +37,18 @@ Each screen under `screens/<name>/` follows MVC with three files:
 
 Customer flow: `idle` → `usb` → `file_browser` → `printing_options` → `payment` → `thank_you`. `admin` and `data_viewer` are side-paths reached via a PIN dialog (`screens/dialogs/pin_dialog/`).
 
+### Inactivity timeout
+
+One timeout for the whole kiosk: `main_app.timeouts` (`managers/timeout_manager.py`), not a timer per screen. A screen declares a `timeout_policy()` on its controller (a `TimeoutPolicy`: seconds, the `action` to run on expiry, an optional `busy()` check, `warn`, `taps_reset`); `show_screen()` hands it over via `_enter_timeout()`. No `timeout_policy()` means no timeout and no label: `idle`, `thank_you`, `admin`, `data_viewer`. The "Remaining Time" label and the expiry read the same deadline, so they can't drift apart, and an expiry only acts if its screen is still the one showing (`_on_screen_timeout`).
+
+Any tap anywhere restarts it (`ui/activity_filter.py`, an app-wide filter, so screens don't wire buttons to a timer); coins, bills and QR reads call `main_app.note_activity()`. With `TIMEOUT_WARNING_SECONDS` (15) left a modal "Still there?" prompt (`ui/timeout_warning.py`) offers `TIMEOUT_EXTEND_SECONDS` (30) more; on payment it says what happens to cash already inserted. A `busy()` screen never expires (payment while change is dispensing, the scanner mid-scan, homepage behind the PIN dialog). `voucher` (3 min) and `scan_result` (60 s) have fixed countdowns: no prompt, taps don't restart them.
+
+Where an expiry goes: before a file is chosen (`homepage`, `usb`, `wifi`, `email`, `scanner`) back to `idle`; mid-flow (`file_browser`, `print_options`, `payment`, `scan_destination`) back to the `homepage`, with `main_app.end_session()` clearing the customer's temp files. Payment's cash still becomes a Voucher through `show_screen()`'s carried-credit redirect. `tests/test_timeout_manager.py` drives it on a fake clock.
+
+### Voucher balance popup
+
+"Check voucher balance" is a popup, not a screen (`screens/voucher_balance`, opened by `main_app.open_voucher_balance()` from the homepage and print options): a dimmed full-window overlay, so nothing underneath can be tapped, and any `show_screen()` closes it and wipes it. While it's open a Voucher QR read checks the balance rather than doing what the screen underneath would. A Voucher that checks out is kept for the session in `main_app.session_vouchers` (`managers/session_vouchers.py`); the payment screen lists those with their balance and a tap-to-apply button and never applies one by itself. They're cleared by `end_session()` and on every arrival at `idle`. A balance check shares the wrong-code lockout with payment (ADR 0003).
+
 ### Background threads
 
 Two persistent `QThread` managers are started in `PrintingSystemApp.__init__` and stopped in `cleanup()`:
@@ -57,8 +69,9 @@ The QR reader is on when `QR_READER_PORT` is set in `.env` (blank = off, typed c
 classified and decided in `managers/qr_reader.py` (`classify_payload`, `decide_qr_read`), then
 `main_app._on_qr_read` acts on them via `open_session_files()` — the same path a typed OTP takes.
 Accepting screens are idle, homepage, wifi and email (each has `show_qr_message()` for the reply).
-A Voucher read (`V1:`) is handed to `payment` (`apply_voucher_code`) or `voucher_balance`
-(`check_voucher_code`), which ignore every other read; all other screens ignore reads silently.
+A Voucher read (`V1:`) is handed to `payment` (`apply_voucher_code`) or, while the balance popup
+is open over any screen (`main_app._qr_context`), to the popup (`check_voucher_code`); both ignore
+every other read, and all other screens ignore reads silently.
 A payload read again within 3 s of its last accepted read is dropped, even with other reads in
 between (`DuplicateReadFilter`; the reader's own duplicate time can't be set over serial). On
 every port open `QrReaderManager` first re-sends the reader's settings as `#<code>;` (`KIOSK_CONFIG`, ~8 s; reads during it are held until it ends); NAKed or unanswered codes write one

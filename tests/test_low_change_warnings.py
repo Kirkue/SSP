@@ -82,10 +82,10 @@ class FakeMainApp:
     def check_paper_count_and_redirect(self):
         return False
 
-    def start_global_countdown(self, seconds=60):
+    def note_activity(self):
         pass
 
-    def stop_global_countdown(self):
+    def end_session(self):
         pass
 
 

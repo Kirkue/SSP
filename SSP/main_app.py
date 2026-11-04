@@ -42,12 +42,14 @@ from managers.printer_manager import PrinterManager
 from managers.hopper_manager import stop_all_hopper_motors
 from managers.db_threader import DatabaseThreadManager
 from managers.ink_analysis_threader import InkAnalysisThreadManager
+from managers.ink_supply import empty_cartridges, format_alerted, low_ink_alerts, low_ink_message, parse_alerted
 from managers.webapp_thread import WebAppThreadManager
 from managers.email_poller_thread import EmailPollerThreadManager
 from managers.qr_reader import (CONNECTED, DuplicateReadFilter, QrReaderManager, classify_payload, decide_qr_read,
                                 describe_reader_status, should_log_status_change)
 from managers.kiosk_status import SETTING_LAST_SEEN, SETTING_QR_STATUS, heartbeat_timestamp
 from managers.session_manager import SessionManager
+from managers.session_vouchers import SessionVouchers
 from database.db_manager import DatabaseManager
 from managers.sms_manager import cleanup_sms
 from managers.print_refund import record_print_success, refund_failed_print
@@ -56,7 +58,10 @@ from managers.persistent_gpio import cleanup_persistent_gpio
 from managers.gpio_check import gpio_problem
 from config import get_config
 from ui.scaling import apply_ui_scale, pin_render_environment
+from managers.timeout_manager import TimeoutManager
+from ui.activity_filter import ActivityFilter
 from ui.tap_guard import ScreenChangeTapGuard
+from ui.timeout_warning import TimeoutWarning
 from ui.theme import apply_theme, render_summary, COLORS
 
 
@@ -97,7 +102,6 @@ class PrintingSystemApp(QMainWindow):
         'scan_destination': 12,
         'scan_result': 13,
         'voucher': 14,
-        'voucher_balance': 15,
     }
 
     def __init__(self):
@@ -137,14 +141,25 @@ class PrintingSystemApp(QMainWindow):
         self._place_timer_label()
         self.global_timer_label.hide()
 
-        self.countdown_timer = QTimer(self)
-        self.countdown_timer.timeout.connect(self._update_countdown)
+        # The one inactivity timeout (managers/timeout_manager.py): it drives the label above
+        # and the "Still there?" prompt, and runs each screen's timeout action.
+        config = get_config()
+        self.timeouts = TimeoutManager(config.timeout_warning_seconds, config.timeout_extend_seconds, parent=self)
+        self.timeout_warning = TimeoutWarning(config.timeout_extend_seconds, self)
+        self.timeouts.tick.connect(self._on_timeout_tick)
+        self.timeouts.warning_shown.connect(self.timeout_warning.show_warning)
+        self.timeouts.tick.connect(self.timeout_warning.update_remaining)
+        self.timeouts.warning_hidden.connect(self.timeout_warning.hide_warning)
+        self.timeouts.expired.connect(self._on_screen_timeout)
+        self.timeout_warning.extend_clicked.connect(self.timeouts.extend)
+        # Any tap counts as activity. Installed before the tap guard so the guard, which
+        # Qt runs first, can drop a doubled tap before it gets here.
+        self.activity_filter = ActivityFilter(self.timeouts.note_tap, parent=self)
+        QApplication.instance().installEventFilter(self.activity_filter)
 
         # Drops the panel's doubled tap that would land on the next screen (ui/tap_guard.py)
         self.tap_guard = ScreenChangeTapGuard(parent=self)
         QApplication.instance().installEventFilter(self.tap_guard)
-
-        self.remaining_seconds = 0
 
         # Initialize all screen controllers
         self.idle_screen = IdleController(self)
@@ -181,8 +196,9 @@ class PrintingSystemApp(QMainWindow):
         # Initialize printer manager (no dependencies)
         self.printer_manager = PrinterManager()
 
-        # Track low paper alert to prevent multiple SMS
-        self.low_paper_alert_sent = False
+        # Set when the printer reported the tray empty, until its print_failed arrives
+        # (the printer thread already sent the out-of-paper SMS for it)
+        self._paper_empty_reported = False
 
         # Initialize remaining screens that depend on other components
         try:
@@ -198,7 +214,6 @@ class PrintingSystemApp(QMainWindow):
         self.scan_destination_screen = ScanDestinationController(self)
         self.scan_result_screen = ScanResultController(self)
         self.voucher_screen = VoucherController(self)
-        self.voucher_balance_screen = VoucherBalanceController(self)
 
         # Connect payment completion to the print workflow once screens exist.
         self.payment_screen.payment_completed.connect(self.on_payment_completed)
@@ -225,7 +240,11 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.addWidget(self.scan_destination_screen)
         self.stacked_widget.addWidget(self.scan_result_screen)
         self.stacked_widget.addWidget(self.voucher_screen)
-        self.stacked_widget.addWidget(self.voucher_balance_screen)
+
+        # "Check voucher balance" is a popup over whichever screen opened it, not a screen
+        # (screens/voucher_balance); the Vouchers it checks are remembered for the session.
+        self.session_vouchers = SessionVouchers()
+        self.voucher_balance = VoucherBalanceController(self, parent_widget=self)
 
         # Manually disable payment acceptors at startup
         print("🔄 Disabling payment acceptors at startup...")
@@ -267,6 +286,7 @@ class PrintingSystemApp(QMainWindow):
         self.printer_manager.print_job_successful.connect(self.on_print_successful)
         self.printer_manager.print_job_failed.connect(self.on_print_failed)
         self.printer_manager.print_job_waiting.connect(self.on_print_waiting)
+        self.printer_manager.paper_empty.connect(self.on_printer_paper_empty)
         print("DEBUG: Printer manager signals connected successfully with QueuedConnection")
 
         # Signal connection established successfully
@@ -352,13 +372,25 @@ class PrintingSystemApp(QMainWindow):
         index = self.stacked_widget.currentIndex()
         return next((name for name, i in self.SCREEN_MAP.items() if i == index), None)
 
+    def _qr_context(self):
+        """Where a QR read lands: the balance popup while it's open (a Voucher read then
+        checks the balance, whatever screen is underneath), otherwise the screen showing."""
+        if self.voucher_balance.is_open:
+            return 'voucher_balance'
+        return self._current_screen_name()
+
+    def open_voucher_balance(self):
+        """The "Check voucher balance" popup, over the current screen."""
+        self.voucher_balance.open()
+
     def _on_qr_read(self, text):
         """One read from the reader (or the SIM injector): de-duplicate, classify, decide, act."""
+        self.note_activity()   # someone is at the kiosk, even if the read is rejected
         if self._qr_duplicates.is_duplicate(text):
             print("QR read ignored: identical read just now")
             return
         read = classify_payload(text)
-        screen = self._current_screen_name()
+        screen = self._qr_context()
         outcome = decide_qr_read(read, screen, self.qr_session_manager)
         print(f"QR read ({read.kind}) on '{screen}' -> {outcome.action}: {outcome.message}")
         if outcome.action == "open_files":
@@ -370,7 +402,7 @@ class PrintingSystemApp(QMainWindow):
         elif outcome.action == "apply_voucher":
             self.payment_screen.apply_voucher_code(text)
         elif outcome.action == "check_voucher":
-            self.voucher_balance_screen.check_voucher_code(text)
+            self.voucher_balance.check_voucher_code(text)
 
     def open_session_files(self, source, files):
         """Load a redeemed wifi/email Session's files into file_browser — the one
@@ -431,6 +463,24 @@ class PrintingSystemApp(QMainWindow):
         if result.get('database_updated', False) and 'cmyk_levels' in result:
             print(f"CMYK levels updated: {result['cmyk_levels']}")
             self.db_threader.cmyk_levels_updated.emit(result['cmyk_levels'])
+            self._alert_low_ink(result['cmyk_levels'])
+
+    def _alert_low_ink(self, levels):
+        """SMS the operator once per tank that has fallen to the low-ink threshold. The
+        alerted tanks are kept in the settings table, so a tank is only re-alerted after
+        it has been topped back above the threshold."""
+        try:
+            db = self.admin_screen.db_manager
+            already = parse_alerted(db.get_setting('ink_low_alerted', default=''))
+            to_alert, alerted = low_ink_alerts(levels, already, get_config().ink_low_alert_percent)
+            if alerted != already:
+                db.update_setting('ink_low_alerted', format_alerted(alerted))
+            if to_alert:
+                print(f"⚠️ Low ink alert: {to_alert}")
+                from managers.sms_manager import send_operator_alert
+                send_operator_alert(low_ink_message(to_alert))
+        except Exception as e:
+            print(f"⚠️ Low ink alert failed: {e}")
 
     def check_paper_count_and_redirect(self, allow_admin_access=False):
         """
@@ -451,47 +501,41 @@ class PrintingSystemApp(QMainWindow):
             return True
         return False
 
-    def _low_ink_cartridges(self):
-        """{cartridge: level%} for each CMYK cartridge at or below 20%; {} if none or unknown."""
+    def _empty_ink_cartridges(self):
+        """{cartridge: level%} for each tank an admin has marked empty (0%); {} if none or unknown.
+        Low ink alone never stops the kiosk: the levels are estimates and customers can't
+        see the tanks, so only the operator's own 'empty' does (managers/ink_supply.py)."""
         cmyk_levels = self.admin_screen.db_manager.get_cmyk_ink_levels()
         if not cmyk_levels:
             print("No CMYK ink data available, skipping ink level check")
             return {}
-        low_ink_threshold = 20.0
-        return {
-            name: level
-            for name, level in cmyk_levels.items()
-            if name in ('cyan', 'magenta', 'yellow', 'black') and level <= low_ink_threshold
-        }
+        return empty_cartridges(cmyk_levels)
 
     def print_supplies_low(self):
-        """True when printing isn't possible: paper at 3 sheets or fewer, or a cartridge low."""
+        """True when printing isn't possible: paper at 3 sheets or fewer, or a tank marked empty."""
         try:
-            return self.admin_screen.get_paper_count() <= 3 or bool(self._low_ink_cartridges())
+            return self.admin_screen.get_paper_count() <= 3 or bool(self._empty_ink_cartridges())
         except Exception as e:
             print(f"Error checking print supplies: {e}")
             return False
 
     def check_ink_levels_and_redirect(self):
         """
-        Check CMYK ink levels and redirect to error screen if any cartridge is critically low.
+        Check the CMYK tanks and redirect to the error screen if an admin has marked one empty.
 
         Returns:
             bool: True if redirected (kiosk should stop), False if ink is acceptable.
         """
         try:
-            low_cartridges = self._low_ink_cartridges()
+            empty_tanks = self._empty_ink_cartridges()
 
-            if low_cartridges:
-                details = ", ".join(
-                    f"{name.capitalize()}: {level:.1f}%"
-                    for name, level in low_cartridges.items()
-                )
-                print(f"Critical low ink detected ({details}). Redirecting to error screen.")
+            if empty_tanks:
+                details = ", ".join(name.capitalize() for name in empty_tanks)
+                print(f"Ink tank marked empty ({details}). Redirecting to error screen.")
                 self.show_screen('thank_you')
                 self.thank_you_screen.show_printing_error(
-                    "Ink levels are too low to continue printing.\n"
-                    "Please contact an administrator to replace the ink cartridges."
+                    "An ink tank is empty.\n"
+                    "Please contact an administrator to refill the ink."
                 )
                 return True
 
@@ -513,6 +557,11 @@ class PrintingSystemApp(QMainWindow):
         if screen_name not in self.SCREEN_MAP:
             print(f"❌ ERROR: Unknown screen name: {screen_name}")
             return
+
+        # The balance popup belongs to the screen it was opened on
+        popup = getattr(self, 'voucher_balance', None)
+        if popup is not None:
+            popup.close()
 
         # Call on_leave lifecycle method for current screen
         current_widget = self.stacked_widget.currentWidget()
@@ -543,10 +592,9 @@ class PrintingSystemApp(QMainWindow):
         self.stacked_widget.setCurrentIndex(target_index)
         self.tap_guard.arm()
 
-        if screen_name == "idle":
-            self.stop_global_countdown()
-        else:
-            self.start_global_countdown(60)
+        if screen_name == 'idle':
+            self.session_vouchers.clear()   # the next customer starts with none checked
+        self._enter_timeout(screen_name)
 
         # Call on_enter lifecycle method for new screen
         new_widget = self.stacked_widget.currentWidget()
@@ -730,14 +778,6 @@ class PrintingSystemApp(QMainWindow):
                         # Verify the update by checking the database again
                         updated_count = self.admin_screen.get_paper_count()
                         print(f"DEBUG: Verified paper count in database: {updated_count}")
-
-                        # Check for low paper alert (only send once)
-                        if new_count <= 10 and not self.low_paper_alert_sent:
-                            print(f"⚠️ Low paper alert: {new_count} sheets remaining")
-                            self.low_paper_alert_sent = True
-                        elif new_count > 10:
-                            # Reset flag if paper count goes back above threshold
-                            self.low_paper_alert_sent = False
                     else:
                         print("❌ Failed to update paper count")
                 else:
@@ -763,6 +803,15 @@ class PrintingSystemApp(QMainWindow):
         else:
             print(f"⚠️ Print waiting signal on wrong screen ({type(self.stacked_widget.currentWidget()).__name__})")
 
+    def on_printer_paper_empty(self):
+        """The printer reports its tray empty: the paper count is wrong, so zero it and
+        the kiosk stops taking customers until an admin records a refill."""
+        self._paper_empty_reported = True
+        try:
+            self.admin_screen.model.mark_paper_empty()
+        except Exception as e:
+            print(f"❌ Could not zero the paper count: {e}")
+
     def on_print_failed(self, error_message):
         """
         Handle print job failure.
@@ -776,12 +825,14 @@ class PrintingSystemApp(QMainWindow):
         """
         print(f"❌ Print job failed: {error_message}")
 
-        # Send SMS notification for all print failures
-        try:
-            from managers.sms_manager import send_printing_error_sms
-            send_printing_error_sms(error_message)
-        except Exception as sms_error:
-            print(f"⚠️ Failed to send SMS notification: {sms_error}")
+        # Send SMS notification for all print failures (a paper-out already sent its own)
+        paper_empty, self._paper_empty_reported = self._paper_empty_reported, False
+        if not paper_empty:
+            try:
+                from managers.sms_manager import send_printing_error_sms
+                send_printing_error_sms(error_message)
+            except Exception as sms_error:
+                print(f"⚠️ Failed to send SMS notification: {sms_error}")
 
         # Log error to database
         try:
@@ -834,32 +885,56 @@ class PrintingSystemApp(QMainWindow):
             print(f"CRITICAL: could not show the refund voucher: {e}")
             return False
 
-    def start_global_countdown(self, seconds=60):
-        self.remaining_seconds = seconds
-        self.global_timer_label.show()
-        self.global_timer_label.setText(f"Remaining Time: {self.remaining_seconds:02d}s")
+    def _enter_timeout(self, screen_name):
+        """Hand the timeout manager the screen's policy. A screen without a
+        `timeout_policy()` (idle, thank_you, admin, data_viewer) has no timeout or label."""
+        widget = self.stacked_widget.currentWidget()
+        make_policy = getattr(widget, 'timeout_policy', None)
+        try:
+            policy = make_policy() if callable(make_policy) else None
+        except Exception as e:
+            print(f"⚠️ Could not read {screen_name}'s timeout policy: {e}")
+            policy = None
+        self.timeouts.enter(screen_name, policy)
+
+    def note_activity(self):
+        """Something other than a tap showed the customer is there (a coin, a bill, a QR read)."""
+        self.timeouts.note_activity()
+
+    def _on_timeout_tick(self, seconds_left):
+        """Keeps the 'Remaining Time' label on the timeout manager's own countdown."""
+        if seconds_left is None:
+            self.global_timer_label.hide()
+            return
+        self.global_timer_label.setText(f"Remaining Time: {seconds_left:02d}s")
         self._place_timer_label()
-        self.countdown_timer.start(1000)
+        self.global_timer_label.show()
+
+    def _on_screen_timeout(self, screen_name, action):
+        """A screen's time ran out. Only acts if that screen is still the one showing, so a
+        timeout can never pull the customer off a screen they've since moved to."""
+        if self._current_screen_name() != screen_name:
+            print(f"⏰ Ignoring stale timeout for '{screen_name}' (now on '{self._current_screen_name()}')")
+            return
+        print(f"⏰ '{screen_name}' timed out")
+        if action is not None:
+            action()
+
+    def end_session(self):
+        """Clear what a customer who walked away left behind: the copies of their USB, Wi-Fi
+        and email files, and the Vouchers they checked, so the next customer can't find them."""
+        self.session_vouchers.clear()
+        try:
+            from managers.usb_file_manager import USBFileManager
+            USBFileManager().cleanup_all_temp_folders()
+        except Exception as e:
+            print(f"⚠️ Could not clear the session's files: {e}")
 
     def _place_timer_label(self):
         """Fit the chip to its text, right-aligned and vertically centred in the 72px header."""
         label = self.global_timer_label
         label.adjustSize()
         label.move(self.width() - label.width() - 28, (72 - label.height()) // 2)
-
-    def stop_global_countdown(self):
-        self.countdown_timer.stop()
-        self.global_timer_label.hide()
-
-    def _update_countdown(self):
-        self.remaining_seconds -= 1
-
-        if self.remaining_seconds <= 0:
-            self.stop_global_countdown()
-            return
-
-        self.global_timer_label.setText(f"Remaining Time: {self.remaining_seconds:02d}s")
-        self._place_timer_label()
 
     def cleanup(self):
         """

@@ -1,6 +1,8 @@
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtCore import pyqtSignal, QTimer
+from PyQt5.QtCore import pyqtSignal
 from .model import PaymentModel
+from managers.session_vouchers import SessionVouchers
+from managers.timeout_manager import TimeoutPolicy
 from managers.voucher_manager import CODE_ALPHABET
 from .view import PaymentScreenView
 
@@ -19,11 +21,6 @@ class PaymentController(QWidget):
         self.model = PaymentModel(main_app)
         self.view = PaymentScreenView(voucher_keys=CODE_ALPHABET)
 
-        # Setup timeout timer (1 minute = 60000ms)
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
-
         # Inline suggestion only (no popup controller)
 
         # Set the view's layout as this controller's layout
@@ -39,13 +36,10 @@ class PaymentController(QWidget):
         self.view.simulation_coin_clicked.connect(self.model.simulate_coin)
         self.view.simulation_bill_clicked.connect(self.model.simulate_bill)
         self.view.voucher_code_entered.connect(self.apply_voucher_code)
+        self.view.checked_voucher_clicked.connect(self.apply_voucher_code)
 
-        # Reset timeout on user interaction
-        self.view.back_button_clicked.connect(self._reset_timeout)
-        self.view.simulation_coin_clicked.connect(self._reset_timeout)
-        self.view.simulation_bill_clicked.connect(self._reset_timeout)
-        self.view.voucher_entry_activity.connect(self._reset_timeout)
-        self.model.amount_received_updated.connect(lambda _amount: self._reset_timeout())  # a coin or bill
+        # A coin or bill is activity too, though it isn't a tap (a bill takes seconds to validate)
+        self.model.amount_received_updated.connect(lambda _amount: self.main_app.note_activity())
 
         # --- Model -> Controller -> View ---
         self.model.payment_data_updated.connect(self.view.update_payment_data)
@@ -54,6 +48,7 @@ class PaymentController(QWidget):
         self.model.change_updated.connect(self.view.update_change_display)
         self.model.suggestion_updated.connect(self.view.update_inline_suggestion)
         self.model.vouchers_updated.connect(self.view.update_vouchers)
+        self.model.vouchers_updated.connect(lambda _applied: self._refresh_checked_vouchers())
         self.model.voucher_message.connect(self.view.show_voucher_message)
         self.model.payment_completed.connect(self._handle_payment_completed)
         self.model.go_back_requested.connect(self._go_back)
@@ -62,8 +57,16 @@ class PaymentController(QWidget):
     def apply_voucher_code(self, raw_code):
         """Apply a Voucher from the "Use a voucher" entry or a QR read. Takes a
         typed code or a 'V1:<code>' payload, so a QR read can be passed straight in."""
-        self._reset_timeout()
         return self.model.apply_voucher(raw_code)
+
+    def _refresh_checked_vouchers(self):
+        """List the Vouchers checked earlier this session that aren't applied yet."""
+        remembered = getattr(self.main_app, 'session_vouchers', None)
+        if not isinstance(remembered, SessionVouchers):
+            self.view.set_checked_vouchers([])
+            return
+        applied = {v.code for v in self.model.applied_vouchers}
+        self.view.set_checked_vouchers([v for v in remembered.items() if v.code not in applied])
 
     def _handle_payment_completed(self, payment_info):
         """Handles payment completion signal from model."""
@@ -97,11 +100,8 @@ class PaymentController(QWidget):
         print(f"DEBUG: Model type: {type(self.model)}")
         print(f"DEBUG: View type: {type(self.view)}")
 
-        # Start timeout timer (1 minute)
-        self.timeout_timer.start(60000)
-        print("TIMEOUT: Payment screen timeout started (1 minute)")
-
         self.view.reset_voucher_entry()
+        self._refresh_checked_vouchers()
         print("DEBUG: About to call model.on_enter()")
         try:
             self.model.on_enter()
@@ -150,34 +150,35 @@ class PaymentController(QWidget):
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("*** PAYMENT CONTROLLER ON_LEAVE METHOD CALLED ***")
-        # Stop timeout timer
-        self.timeout_timer.stop()
-        print("TIMEOUT: Payment screen timeout stopped")
         # Disable payment pins
         self.model.on_leave()
         print("*** PAYMENT CONTROLLER ON_LEAVE COMPLETED ***")
 
+    def timeout_policy(self):
+        # Never while the payment completes or change is coming out: leaving then would
+        # stop the hoppers mid-payout (PaymentModel.is_busy).
+        return TimeoutPolicy(seconds=60, action=self._on_timeout, busy=self.model.is_busy,
+                             warning_message=self._timeout_warning_message)
+
+    def _timeout_warning_message(self):
+        """What the "Still there?" prompt says about cash already inserted (Carried Credit)."""
+        amount = self.model.amount_received
+        if amount > 0:
+            return f"Your ₱{amount:g} will be saved as a voucher."
+        return ""
+
     def _on_timeout(self):
-        """Handle timeout - return to idle screen."""
+        """The customer walked away mid-flow: back to the homepage. Cash already in becomes a
+        Voucher (show_screen's carried-credit redirect), and their files are cleared."""
         if self.model.is_busy():
-            # Leaving now would stop the hoppers mid-payout: wait for the payment to finish.
-            print("TIMEOUT: Payment screen timeout deferred, change is dispensing")
-            self.timeout_timer.start(60000)
-            return
-        print("TIMEOUT: Payment screen timeout - returning to idle screen")
+            return   # the policy already holds the timeout off; belt and braces
+        print("TIMEOUT: Payment screen timeout - returning to homepage")
         # Properly clean up payment screen before navigating away
         self.on_leave()
         # Additional safety: manually disable acceptors as backup
         self._manual_disable_acceptors()
-        self.main_app.show_screen('idle')
-
-    def _reset_timeout(self):
-        """Reset the timeout timer (call on user activity)."""
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)
-        print("TIMEOUT: Payment screen timeout reset")
+        self.main_app.end_session()
+        self.main_app.show_screen('homepage')
 
     def _manual_disable_acceptors(self):
         """Manually disable acceptors as a safety backup."""

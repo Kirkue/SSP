@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QGridLayout, QDialog
-from PyQt5.QtCore import QTimer
 
+from managers.timeout_manager import TimeoutPolicy
 from screens.dialogs.pin_dialog import PinDialogController as PinDialog
 from .model import HomepageModel
 from .view import HomepageScreenView
@@ -15,11 +15,7 @@ class HomepageController(QWidget):
 
         self.model = HomepageModel()
         self.view = HomepageScreenView()
-
-        # Setup timeout timer (1 minute), matches other screens
-        self.timeout_timer = QTimer()
-        self.timeout_timer.setSingleShot(True)
-        self.timeout_timer.timeout.connect(self._on_timeout)
+        self._pin_dialog_open = False
 
         layout = QGridLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -31,7 +27,6 @@ class HomepageController(QWidget):
         """Connect signals from the view to the model and vice-versa."""
 
         self.view.method_card_clicked.connect(self._handle_method_selected)
-        self.view.method_card_clicked.connect(self._reset_timeout)
 
         self.model.method_selected.connect(self._route_method)
 
@@ -57,18 +52,19 @@ class HomepageController(QWidget):
             print(f"Landing screen: Unknown method selected: {method_key}")
 
     def _check_voucher_balance(self):
-        """Balance check doesn't start a print job; it returns here when done."""
-        self.main_app.show_screen('voucher_balance')
+        """A popup over this screen: it doesn't start a print job or leave the homepage."""
+        self.main_app.open_voucher_balance()
 
     def _go_to_admin(self):
         """Opens the PIN dialog (same as the idle screen) and goes to admin if correct."""
-        # Pause the idle timeout so it can't yank the screen away behind the dialog.
-        self.timeout_timer.stop()
-        accepted = PinDialog(self).exec_() == QDialog.Accepted
+        # The dialog runs its own event loop, so the timeout must not expire behind it.
+        self._pin_dialog_open = True
+        try:
+            accepted = PinDialog(self).exec_() == QDialog.Accepted
+        finally:
+            self._pin_dialog_open = False
         if accepted:
             self.main_app.show_screen('admin')
-        else:
-            self._reset_timeout()
 
     def show_qr_message(self, message):
         """A message about a QR read (from main_app)."""
@@ -85,22 +81,15 @@ class HomepageController(QWidget):
         print("Homepage screen entered")
         self.view.show_status("")
         self.view.set_change_low(self.model.is_change_low())
-        self.timeout_timer.start(60000)
-        print("Homepage screen timeout started (1 minute)")
 
     def on_leave(self):
         """Called by main_app when leaving this screen."""
         print("Homepage screen leaving")
-        self.timeout_timer.stop()
+
+    def timeout_policy(self):
+        return TimeoutPolicy(seconds=60, action=self._on_timeout, busy=lambda: self._pin_dialog_open)
 
     def _on_timeout(self):
-        """Handle timeout - return to idle screen."""
+        """Nobody has chosen a way to upload yet: back to idle."""
         print("Homepage screen timeout - returning to idle screen")
         self.main_app.show_screen('idle')
-
-    def _reset_timeout(self):
-        """Reset the timeout timer (call on user activity)."""
-        if self.main_app.stacked_widget.currentWidget() is not self:
-            return
-        self.timeout_timer.stop()
-        self.timeout_timer.start(60000)

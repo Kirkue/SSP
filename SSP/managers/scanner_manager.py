@@ -9,9 +9,11 @@
 import os
 import shutil
 import tempfile
+import time
 
 import fitz  # PyMuPDF
 
+from managers.scan_progress import ScanTimeEstimator
 from managers.scanner import ScannerError, ScannerInterface, build_scanner_from_config
 
 
@@ -25,8 +27,14 @@ class ScannerManager:
 
         self.scanner = scanner
         self.dpi = dpi
+        self.colour = False   # per session, set by the screen; greyscale scans are ~2x faster
+        self.timings = ScanTimeEstimator()
         self.session_dir = None
         self.pages = []  # ordered list of page image paths
+
+    def expected_scan_seconds(self) -> float:
+        """How long the next page should take, from recent scans of the same kind."""
+        return self.timings.expected(self.colour)
 
     def start_session(self):
         """Begin a fresh scan session, discarding any stale one."""
@@ -39,7 +47,9 @@ class ScannerManager:
         if self.session_dir is None:
             self.start_session()
 
-        path = self.scanner.scan_page(self.dpi)
+        started = time.monotonic()
+        path = self.scanner.scan_page(self.dpi, self.colour)
+        self.timings.record(self.colour, time.monotonic() - started)
         self.pages.append(path)
         return {"page_number": len(self.pages), "path": path}
 

@@ -185,10 +185,17 @@ class ThankYouModel(QObject):
         Update state to show a no paper error.
 
         Args:
-            paper_count: Current paper count (0 or 1)
+            paper_count: Current paper count (0 to 3: the kiosk closes at 3 sheets or fewer)
         """
         self.current_state = "error"
         self.error_type = "no_paper"
+
+        # The counter is software: it doesn't notice the tray being refilled, so the kiosk stays
+        # closed until an admin records the refill. Say so, or loading paper looks like it did nothing.
+        admin_hint = (
+            "\n\nAdmin: after loading paper, tap Admin Override and record it with Refill "
+            "(or the + button) under Paper Count. The kiosk stays closed until then."
+        )
 
         # Stop any existing safety timeout since we're now in error state
         if self.redirect_timer.isActive():
@@ -198,11 +205,13 @@ class ThankYouModel(QObject):
             self.status_updated.emit(
                 "NO PAPER AVAILABLE",
                 "The printer is out of paper. Please contact an administrator to refill paper."
+                + admin_hint
             )
-        else:  # paper_count == 1
+        else:
+            pages = f"Only {paper_count} page{'s' if paper_count != 1 else ''} remaining."
             self.status_updated.emit(
                 "LOW PAPER WARNING",
-                "Only 1 page remaining. Please contact an administrator to refill paper."
+                f"{pages} Please contact an administrator to refill paper." + admin_hint
             )
 
         # Show admin override button

@@ -197,6 +197,65 @@ class Config:
         """Get minimum pixel count threshold for color detection."""
         return self.get('PIXEL_COUNT_THRESHOLD', int)
 
+    # Inactivity timeout (managers/timeout_manager.py)
+
+    @property
+    def timeout_warning_seconds(self) -> int:
+        """Seconds left at which the "Still there?" prompt appears (default 15)."""
+        try:
+            return max(1, self.get('TIMEOUT_WARNING_SECONDS', int))
+        except KeyError:
+            return 15
+
+    @property
+    def timeout_extend_seconds(self) -> int:
+        """Seconds the prompt's button adds (default 30)."""
+        try:
+            return max(1, self.get('TIMEOUT_EXTEND_SECONDS', int))
+        except KeyError:
+            return 30
+
+    # Supplies
+
+    @property
+    def low_paper_alert_sheets(self) -> int:
+        """Sheets left at or below which the operator gets a low-paper SMS (default 10).
+        The one place this threshold lives; the kiosk still stops taking customers at 3."""
+        try:
+            return max(0, self.get('LOW_PAPER_ALERT_SHEETS', int))
+        except KeyError:
+            return 10
+
+    @property
+    def ink_low_alert_percent(self) -> float:
+        """Estimated tank level (%) at or below which the operator gets a low-ink SMS (default 20).
+        Low ink never stops the kiosk by itself; only an admin marking a tank empty does."""
+        try:
+            return self.get('INK_LOW_ALERT_PERCENT', float)
+        except KeyError:
+            return 20.0
+
+    # Bottle yields (pages at the standard 5% coverage) the ink estimate is scaled by. Defaults are
+    # HP's data sheet figures for the Smart Tank 670 (GT53XL black ~6,200 pages, GT52 colour
+    # ~9,100 pages per bottle, ISO/IEC 24712 pages). A too-high yield makes the estimate drain
+    # too slowly (docs/remaining-work.md 2.5).
+
+    @property
+    def ink_yield_black_pages(self) -> int:
+        """Pages one black bottle prints at standard coverage."""
+        try:
+            return max(1, self.get('INK_YIELD_BLACK_PAGES', int))
+        except KeyError:
+            return 6200
+
+    @property
+    def ink_yield_color_pages(self) -> int:
+        """Pages one colour bottle prints at standard coverage."""
+        try:
+            return max(1, self.get('INK_YIELD_COLOR_PAGES', int))
+        except KeyError:
+            return 9100
+
     # SMS / hardware settings
 
     @property
@@ -649,6 +708,15 @@ class Config:
             return self.get('SCANNER_DPI', int)
         except KeyError:
             return 200
+
+    @property
+    def scanner_colour_default(self) -> bool:
+        """Whether a scan session starts in Colour (SCANNER_MODE=Color). The default is
+        Gray, which scans about twice as fast; the scanner screen lets the customer switch."""
+        try:
+            return self.get('SCANNER_MODE', str).strip().lower() in ('color', 'colour')
+        except KeyError:
+            return False
 
     @property
     def scanner_timeout(self) -> int:
