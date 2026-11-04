@@ -8,7 +8,7 @@ _VENV_PY := $(firstword $(wildcard .venv/Scripts/python.exe) $(wildcard .venv/bi
 _WIN_PY := $(shell for p in $$(ls /mnt/c/Users/*/AppData/Local/Programs/Python/Python3*/python.exe 2>/dev/null | sort -V); do $$p -c "import pytest" 2>/dev/null && echo $$p && break; done)
 PYTHON ?= $(if $(_VENV_PY),$(_VENV_PY),$(if $(_WIN_PY),$(_WIN_PY),python3))
 
-.PHONY: run run-sim run-admin-dashboard seed-demo-data screenshots test test-hotspot lint
+.PHONY: run run-sim run-admin-dashboard seed-demo-data screenshots intake-sheet test test-hotspot lint
 
 # Run the app on the kiosk (requires hardware + CUPS + pigpiod)
 # Runs from repo root so config.py finds .env here (SSP/.env is gitignored)
@@ -36,6 +36,11 @@ run-sim:
 # (headless, simulated hardware, temp DB). The reference picture for UI changes.
 screenshots:
 	$(PYTHON) -X utf8 scripts/render_screens.py --out screenshots
+
+# Write intake_sheet.pdf, the Wi-Fi/email how-to sheet taped to the kiosk, from
+# this kiosk's .env. Add ARGS=--print to send it to the printer too.
+intake-sheet:
+	$(PYTHON) -X utf8 scripts/make_intake_sheet.py $(ARGS)
 
 # Run the Admin Dashboard — a separate FastAPI/Uvicorn process from the
 # kiosk GUI and the Wi-Fi portal (see

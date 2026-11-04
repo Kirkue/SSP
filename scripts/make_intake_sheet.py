@@ -6,8 +6,10 @@ The addresses come from .env through the same functions the Wi-Fi and email
 screens use, so the sheet matches what the kiosk shows. Run it on the kiosk
 with the kiosk's venv Python, from the repo root (where .env lives):
 
-    python scripts/make_intake_sheet.py            # writes intake_sheet.pdf
-    python scripts/make_intake_sheet.py --print    # also sends it to the printer (lp)
+    make intake-sheet                  # writes intake_sheet.pdf
+    make intake-sheet ARGS=--print     # also sends it to the printer (lp)
+
+or run this file directly with the same Python.
 """
 import argparse
 import io
