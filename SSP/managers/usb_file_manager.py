@@ -10,6 +10,17 @@ from datetime import datetime
 from managers.pdf_check import check_pdf
 
 
+def display_filename(original, fallback):
+    """The name to show a customer for an uploaded file: their original
+    filename with any path stripped (either slash style) and control
+    characters removed, or `fallback` when there's nothing usable left."""
+    if not original:
+        return fallback
+    name = str(original).replace('\\', '/').rsplit('/', 1)[-1]
+    name = ''.join(ch for ch in name if ch.isprintable()).strip()
+    return name or fallback
+
+
 class USBFileManager:
     """Handles USB detection and PDF file filtering"""
 
@@ -318,7 +329,7 @@ class USBFileManager:
             traceback.print_exc()
             return []
 
-    def scan_and_copy_pdf_files_by_paths(self, source_paths: list) -> list:
+    def scan_and_copy_pdf_files_by_paths(self, source_paths: list, display_names: list = None) -> list:
         """Like scan_and_copy_pdf_files() but for an explicit list of
         already-validated files (a SessionManager-resolved wifi/email
         upload), not a directory walk — walking the upload directory would
@@ -329,16 +340,22 @@ class USBFileManager:
         A copy failure on one file is skipped rather than aborting the rest
         of the batch — by the time paths reach here they've already passed
         adapter-side validation and OTP verification, so a failure here is a
-        filesystem problem (disk full, permissions), not a validity one."""
+        filesystem problem (disk full, permissions), not a validity one.
+
+        display_names (parallel to source_paths) are the customer's original
+        filenames, shown as 'filename' in place of the stored <uuid>.pdf name;
+        the copy keeps the stored name so two same-named uploads can't collide."""
         print(f"\n🔍 Starting scan_and_copy_pdf_files_by_paths for {len(source_paths)} file(s)")
         self._create_new_session()
         self.set_operation_in_progress(True)
         copied_files = []
 
         try:
-            for source_path in source_paths:
-                filename = os.path.basename(source_path)
-                dest_path = os.path.join(self.destination_dir, filename)
+            names = list(display_names or [])
+            for i, source_path in enumerate(source_paths):
+                stored_name = os.path.basename(source_path)
+                dest_path = os.path.join(self.destination_dir, stored_name)
+                filename = display_filename(names[i] if i < len(names) else None, stored_name)
 
                 try:
                     self.mark_file_in_use(source_path)

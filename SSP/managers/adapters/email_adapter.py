@@ -14,12 +14,26 @@ import email
 import os
 import uuid
 from dataclasses import dataclass
+from email.header import decode_header, make_header
 from email.message import EmailMessage
 from typing import Optional
 
 from managers.session_manager import Session
 
 PDF_MAGIC = b"%PDF"
+
+
+def attachment_filename(part) -> Optional[str]:
+    """The attachment's filename as the sender saw it. get_filename() decodes
+    RFC 2231 (filename*=) but leaves RFC 2047 encoded-words (=?UTF-8?B?...?=),
+    which many mail clients use for non-ASCII names, so decode those here."""
+    name = part.get_filename()
+    if not name:
+        return None
+    try:
+        return str(make_header(decode_header(name)))
+    except Exception:
+        return name
 
 
 @dataclass
@@ -118,7 +132,7 @@ class EmailAdapter:
 
             session = self.session_manager.create_session(
                 source="email",
-                files=[{"path": dest_path, "original_filename": pdf_part.get_filename()}],
+                files=[{"path": dest_path, "original_filename": attachment_filename(pdf_part)}],
                 metadata=sender,
             )
             return MessageResult("accepted", session, message_id, sender)

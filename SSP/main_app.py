@@ -410,7 +410,8 @@ class PrintingSystemApp(QMainWindow):
         if none of the files could be loaded."""
         from managers.usb_file_manager import USBFileManager  # same import the wifi/email controllers used
         source_paths = [f['path'] for f in files]
-        pdf_files = USBFileManager().scan_and_copy_pdf_files_by_paths(source_paths)
+        names = [f.get('original_filename') for f in files]
+        pdf_files = USBFileManager().scan_and_copy_pdf_files_by_paths(source_paths, names)
         if not pdf_files:
             return False
         self.file_browser_screen.set_source(source)

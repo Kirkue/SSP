@@ -26,6 +26,12 @@ from managers.print_refund import record_digital_refund, record_print_success
 from config import get_config
 
 
+def _document_name(pdf_data):
+    """The customer-facing name of the document being paid for: the original
+    filename file_browser shows, not the stored <uuid>.pdf copy's name."""
+    return pdf_data.get('filename') or os.path.basename(pdf_data.get('path') or '')
+
+
 def measure_shortfall(result, change_owed):
     """Change owed minus change actually dispensed, whole pesos. The failure
     paths (no pigpio, hopper init, dispenser None) return no actual_change,
@@ -433,7 +439,7 @@ class PaymentModel(QObject):
         pricing_info = analysis.get('pricing', {})
         b_count = pricing_info.get('black_pages_count', 0)
         c_count = pricing_info.get('color_pages_count', 0)
-        doc_name = os.path.basename(payment_data['pdf_data']['path'])
+        doc_name = _document_name(payment_data['pdf_data'])
 
         summary_data = {
             'total_cost': self.total_cost,
@@ -926,14 +932,13 @@ class PaymentModel(QObject):
 
             # Defensive guards for keys
             pdf_data = payment_data.get('pdf_data') or {}
-            file_path = pdf_data.get('path') or "unknown.pdf"
             selected_pages = payment_data.get('selected_pages') or []
             copies = int(payment_data.get('copies') or 1)
             color_mode = payment_data.get('color_mode') or 'Color'
 
             # Log cancelled transaction with partial payment
             transaction_data = {
-                'file_name': os.path.basename(file_path),
+                'file_name': _document_name(pdf_data) or "unknown.pdf",
                 'pages': len(selected_pages),
                 'copies': copies,
                 'color_mode': color_mode,
@@ -1025,7 +1030,7 @@ class PaymentModel(QObject):
             # Logged as 'paid' by settle_transaction() once change is out;
             # _issue_shortfall_voucher fills in change_dispensed / voucher_issued.
             self.transaction_data = {
-                'file_name': os.path.basename(self.payment_data['pdf_data']['path']),
+                'file_name': _document_name(self.payment_data['pdf_data']),
                 'pages': len(self.payment_data['selected_pages']),
                 'copies': self.payment_data['copies'],
                 'color_mode': self.payment_data['color_mode'],
