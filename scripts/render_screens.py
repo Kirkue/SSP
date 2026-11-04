@@ -78,6 +78,8 @@ def fill_live_content(name, screen):
         screen.view.update_page_count(2)
         screen.view.show_preview(sample_page_image(), 2)
         screen.view.show_status("Scan timed out after 60s — check the scanner connection.")
+    if name == "thank_you":
+        screen.model.show_no_paper_error(0)  # its longest message: the admin's refill hint
 
 
 def sample_page_image():

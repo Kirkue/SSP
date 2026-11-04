@@ -140,6 +140,27 @@ def test_thank_you_screen_explains_a_paused_printer(monkeypatch):
     assert "The printer is paused." in shown[-1][1]
 
 
+@pytest.mark.parametrize("count, title, text", [
+    (0, "NO PAPER AVAILABLE", "out of paper"),
+    (1, "LOW PAPER WARNING", "Only 1 page remaining"),
+    (3, "LOW PAPER WARNING", "Only 3 pages remaining"),
+])
+def test_thank_you_screen_tells_the_admin_how_to_reopen_the_kiosk(count, title, text):
+    QApplication.instance() or QApplication([])
+    from screens.thank_you.model import ThankYouModel
+
+    model = ThankYouModel()
+    shown = []
+    model.status_updated.connect(lambda t, b: shown.append((t, b)))
+
+    model.show_no_paper_error(count)
+
+    assert shown[-1][0] == title
+    assert text in shown[-1][1]
+    assert "Admin: after loading paper" in shown[-1][1]
+    assert "Refill" in shown[-1][1]
+
+
 def test_disabled_queue_is_not_available(monkeypatch):
     import managers.printer_manager as pm
     monkeypatch.delenv('SIM_MODE', raising=False)
