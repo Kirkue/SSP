@@ -46,8 +46,17 @@ class DatabaseManager(VoucherDBMixin):
             # threadpool/event-loop threads within the same request. The
             # connection is still only ever touched sequentially within a
             # single request's lifecycle, never concurrently, so this is safe.
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            # timeout: wait up to 30 s for another connection's write lock
+            # (print completion, the email poller and the webapp each hold
+            # their own connection) instead of failing with "database is locked".
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)
             self.conn.row_factory = self.dict_factory
+            try:
+                # WAL lets readers and a writer overlap; the setting persists in the file.
+                self.conn.execute("PRAGMA journal_mode=WAL")
+                self.conn.execute("PRAGMA busy_timeout=30000")
+            except sqlite3.Error as e:
+                print(f"⚠️ Could not enable WAL mode: {e}")
             print(f"✅ Database connection established: {self.db_path}")
         except sqlite3.Error as e:
             print(f"❌ Database connection error: {e}")
