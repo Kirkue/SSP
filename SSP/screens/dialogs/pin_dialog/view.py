@@ -51,6 +51,7 @@ class PinDialogView(QDialog):
             'C', '0', '✓'
         ]
 
+        self._keys = []
         positions = [(i, j) for i in range(4) for j in range(3)]
 
         for position, value in zip(positions, buttons):
@@ -65,6 +66,7 @@ class PinDialogView(QDialog):
                 button.setObjectName("PinEnter")
                 button.clicked.connect(self.enter_clicked.emit)
 
+            self._keys.append(button)
             keypad_layout.addWidget(button, *position)
 
         main_layout.addLayout(keypad_layout)
@@ -72,6 +74,16 @@ class PinDialogView(QDialog):
     def update_pin_display(self, pin_text):
         """Updates the PIN display with the provided text (asterisks)."""
         self.pin_display.setText(pin_text)
+
+    def set_locked(self, locked, seconds):
+        """Disables the keypad and shows the time left while locked."""
+        was_locked = not self._keys[0].isEnabled()
+        for key in self._keys:
+            key.setEnabled(not locked)
+        if locked:
+            self.status_label.setText(f"Locked. Try again in {seconds // 60}:{seconds % 60:02d}")
+        elif was_locked:
+            self.status_label.setText("Enter PIN")
 
     def update_status(self, status_text):
         """Updates the status label with the provided message."""

@@ -407,6 +407,22 @@ class Config:
         except KeyError:
             return "1234"
 
+    @property
+    def admin_pin_max_attempts(self) -> int:
+        """Consecutive wrong PINs before the PIN dialog locks."""
+        try:
+            return max(1, self.get('ADMIN_PIN_MAX_ATTEMPTS', int))
+        except (KeyError, ValueError):
+            return 5
+
+    @property
+    def admin_pin_lockout_minutes(self) -> float:
+        """Minutes the PIN dialog stays locked after too many wrong PINs."""
+        try:
+            return max(0.0, self.get('ADMIN_PIN_LOCKOUT_MINUTES', float))
+        except (KeyError, ValueError):
+            return 5.0
+
     # Display settings
 
     @property
