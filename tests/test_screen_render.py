@@ -26,8 +26,8 @@ def test_text_uses_the_bundled_font_in_pixels():
 
 def test_every_screen_fits_the_kiosk_panel(tmp_path):
     result = subprocess.run(
-        [sys.executable, "scripts/render_screens.py", "--out", str(tmp_path)],
-        cwd=REPO_ROOT, capture_output=True, text=True, timeout=120,
+        [sys.executable, "-X", "utf8", "scripts/render_screens.py", "--out", str(tmp_path)],
+        cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", timeout=120,
     )
     assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
     assert "OVERFLOWS" not in result.stdout
