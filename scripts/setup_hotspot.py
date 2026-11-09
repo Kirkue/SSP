@@ -362,7 +362,7 @@ def detect_raspap(root: Path) -> List[str]:
     found = [m for m in RASPAP_MARKERS if (root / m).exists()]
     dnsmasq_d = root / "etc/dnsmasq.d"
     if dnsmasq_d.is_dir():
-        found += sorted(str(p.relative_to(root)) for p in dnsmasq_d.glob(RASPAP_DNSMASQ_GLOB))
+        found += sorted(p.relative_to(root).as_posix() for p in dnsmasq_d.glob(RASPAP_DNSMASQ_GLOB))
     return found
 
 

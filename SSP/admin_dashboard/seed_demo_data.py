@@ -85,8 +85,14 @@ def seed(db_path=None):
     conn = sqlite3.connect(target)
     try:
         now = datetime.now()
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
         for source, total_cost, age in FIXTURES:
-            seed_transaction(conn, source, total_cost, timestamp=now - age)
+            timestamp = now - age
+            if age < timedelta(days=1):
+                # "Today" rows are hours old; shortly after midnight that would
+                # land on yesterday, so keep them inside today's window.
+                timestamp = max(timestamp, midnight)
+            seed_transaction(conn, source, total_cost, timestamp=timestamp)
         conn.commit()
     finally:
         conn.close()
