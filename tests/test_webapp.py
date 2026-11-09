@@ -45,12 +45,12 @@ EXTERNAL_REF = re.compile(r"""(?:src|href|action)\s*=\s*["']?(?:https?:)?//|url\
 
 def test_portal_pages_load_nothing_from_the_internet():
     for page in TEMPLATES.glob("*.html"):
-        assert not EXTERNAL_REF.search(page.read_text()), page.name
+        assert not EXTERNAL_REF.search(page.read_text(encoding="utf-8")), page.name
 
 
 def test_every_included_icon_exists():
     for page in TEMPLATES.glob("*.html"):
-        for name in re.findall(r'{%\s*include\s+"(icons/[^"]+)"\s*%}', page.read_text()):
+        for name in re.findall(r'{%\s*include\s+"(icons/[^"]+)"\s*%}', page.read_text(encoding="utf-8")):
             assert (TEMPLATES / name).is_file(), f"{page.name}: {name}"
 
 
