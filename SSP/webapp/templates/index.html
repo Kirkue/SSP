@@ -183,39 +183,6 @@
             background:#1a1a1a;
         }
 
-        .icon-buttons{
-
-            display:flex;
-            justify-content:center;
-            gap:24px;
-            margin-top:28px;
-            width:100%;
-
-        }
-
-        .icon-btn{
-
-            width:64px;
-            height:64px;
-
-            border:none;
-
-            border-radius:12px;
-
-            background:#000;
-            color:#fff;
-
-            display:flex;
-
-            justify-content:center;
-            align-items:center;
-
-            font-size:34px;
-
-            cursor:pointer;
-
-        }
-
         /*=========================
             STAGED FILE LIST
         =========================*/
@@ -348,12 +315,6 @@
 
             }
 
-            .icon-buttons{
-
-                justify-content:center;
-
-            }
-
         }
 
         /*=========================
@@ -423,6 +384,17 @@
             text-align: center;
         }
 
+        .privacy-note {
+            background: #fff8e1;
+            border: 1px solid #ffe08a;
+            color: #5c4500;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 0 0 16px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
     </style>
 
 </head>
@@ -468,6 +440,12 @@
 
                 </ol>
 
+                <p class="privacy-note">
+                    This Wi-Fi network is not encrypted. Other people nearby
+                    could read what you send. Do not upload documents with
+                    sensitive personal information.
+                </p>
+
                 <form
                     method="POST"
                     action="/upload"
@@ -504,26 +482,6 @@
                     </button>
 
                 </form>
-
-                <div class="icon-buttons">
-
-                    <button
-                        type="button"
-                        class="icon-btn">
-
-                        {% include "icons/google-drive.svg" %}
-
-                    </button>
-
-                    <button
-                        type="button"
-                        class="icon-btn">
-
-                        {% include "icons/dropbox.svg" %}
-
-                    </button>
-
-                </div>
 
             </main>
 
