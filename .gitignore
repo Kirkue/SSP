@@ -33,3 +33,5 @@ SSP/database/*.db
 screenshots/
 # Printed how-to sheet from scripts/make_intake_sheet.py
 intake_sheet.pdf
+
+SSP/logs/

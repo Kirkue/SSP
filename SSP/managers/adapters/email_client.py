@@ -15,6 +15,11 @@ from typing import List, Tuple
 
 _UIDVALIDITY_RE = re.compile(rb"UIDVALIDITY (\d+)")
 
+# Seconds any one socket operation may wait. Without it, a network that drops
+# mid-connection blocks the email poller thread forever and email intake stops
+# until the app restarts; with it the call fails and the next poll cycle retries.
+DEFAULT_TIMEOUT_SECONDS = 30
+
 
 class ImapClient:
     """
@@ -24,18 +29,20 @@ class ImapClient:
     """
 
     def __init__(self, host: str, port: int, username: str, password: str,
-                 use_ssl: bool = True, mailbox: str = "INBOX"):
+                 use_ssl: bool = True, mailbox: str = "INBOX",
+                 timeout: float = DEFAULT_TIMEOUT_SECONDS):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.use_ssl = use_ssl
         self.mailbox = mailbox
+        self.timeout = timeout
         self._conn = None
 
     def __enter__(self):
         conn_cls = imaplib.IMAP4_SSL if self.use_ssl else imaplib.IMAP4
-        self._conn = conn_cls(self.host, self.port)
+        self._conn = conn_cls(self.host, self.port, timeout=self.timeout)
         self._conn.login(self.username, self.password)
         self._conn.select(self.mailbox)
         return self
@@ -76,18 +83,20 @@ class ImapClient:
 
 
 class SmtpClient:
-    def __init__(self, host: str, port: int, username: str, password: str, use_ssl: bool = True):
+    def __init__(self, host: str, port: int, username: str, password: str, use_ssl: bool = True,
+                 timeout: float = DEFAULT_TIMEOUT_SECONDS):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.use_ssl = use_ssl
+        self.timeout = timeout
 
     def send(self, msg: EmailMessage):
         # SMTP_SSL covers Gmail's port 465. Greenmail's plain test port needs
         # neither TLS nor real credentials, so use_ssl=False just skips it —
         # add STARTTLS (port 587) here later if a deployment needs it instead.
         smtp_cls = smtplib.SMTP_SSL if self.use_ssl else smtplib.SMTP
-        with smtp_cls(self.host, self.port) as server:
+        with smtp_cls(self.host, self.port, timeout=self.timeout) as server:
             server.login(self.username, self.password)
             server.send_message(msg)
